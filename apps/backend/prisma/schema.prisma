@@ -1,0 +1,57 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum DecisionStatus {
+  APPROVED
+  PENDING
+  REJECTED
+}
+
+model PullRequestRecord {
+  id            String           @id @default(cuid())
+  prNumber      Int
+  title         String
+  description   String?
+  mergedAt      DateTime?
+  author        String
+  url           String
+  repository    String
+  sourcePayload Json?
+  createdAt     DateTime         @default(now())
+  decisions     DecisionMemory[]
+
+  @@unique([repository, prNumber])
+  @@index([repository])
+  @@map("pr_records")
+}
+
+model DecisionMemory {
+  id          String            @id @default(cuid())
+  decision    String
+  reason      String
+  alternative String?
+  impact      String
+  author      String
+  sourcePR    String
+  repository  String
+  filesChanged String[]         @default([])
+  confidence  Float
+  status      DecisionStatus    @default(PENDING)
+  category    String            @default("architecture")
+  prRecordId  String?
+  prRecord    PullRequestRecord? @relation(fields: [prRecordId], references: [id], onDelete: SetNull)
+  createdAt   DateTime          @default(now())
+  updatedAt   DateTime          @updatedAt
+
+  @@index([status])
+  @@index([repository])
+  @@index([category])
+  @@index([createdAt])
+  @@map("decision_memories")
+}

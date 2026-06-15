@@ -1,0 +1,51 @@
+name: DecisionCapture
+
+on:
+  pull_request:
+    types: [closed]
+
+jobs:
+  capture:
+    if: github.event.pull_request.merged == true
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: read
+    steps:
+      - name: Collect PR context
+        id: context
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPOSITORY: ${{ github.repository }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          gh pr view "$PR_NUMBER" --repo "$REPOSITORY" \
+            --json number,title,body,author,url,mergedAt,files,commits,reviews,labels \
+            > pr-context.json
+
+      - name: Send PR context to DecisionCapture
+        env:
+          DECISIONCAPTURE_API_URL: ${{ secrets.DECISIONCAPTURE_API_URL }}
+          DECISIONCAPTURE_TOKEN: ${{ secrets.DECISIONCAPTURE_TOKEN }}
+        run: |
+          jq '{
+            prNumber: .number,
+            title: .title,
+            description: (.body // ""),
+            mergedAt: .mergedAt,
+            author: .author.login,
+            url: .url,
+            repository: env.GITHUB_REPOSITORY,
+            filesChanged: [.files[].path],
+            commits: [.commits[].messageHeadline],
+            reviewers: [.reviews[].author.login],
+            reviewComments: [.reviews[].body],
+            approvals: [.reviews[] | select(.state == "APPROVED") | .author.login],
+            labels: [.labels[].name],
+            diffSummary: "Collected by GitHub Action after merge"
+          }' pr-context.json > payload.json
+
+          curl -fsS -X POST "$DECISIONCAPTURE_API_URL/decisions/analyze" \
+            -H "content-type: application/json" \
+            -H "x-decisioncapture-token: $DECISIONCAPTURE_TOKEN" \
+            --data @payload.json

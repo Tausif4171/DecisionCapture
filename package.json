@@ -1,0 +1,24 @@
+{
+  "name": "decisioncapture",
+  "version": "0.1.0",
+  "private": true,
+  "workspaces": [
+    "packages/*",
+    "apps/*"
+  ],
+  "scripts": {
+    "dev": "npm run build -w @decisioncapture/shared && concurrently \"npm run dev -w @decisioncapture/backend\" \"npm run dev -w @decisioncapture/frontend\"",
+    "build": "npm run build -ws --if-present",
+    "lint": "npm run lint -ws --if-present",
+    "typecheck": "npm run typecheck -ws --if-present",
+    "test": "npm run test -w @decisioncapture/backend",
+    "db:generate": "npm run db:generate -w @decisioncapture/backend",
+    "db:push": "npm run db:push -w @decisioncapture/backend",
+    "db:migrate": "npm run db:migrate -w @decisioncapture/backend"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.39.2",
+    "concurrently": "^9.2.1",
+    "typescript-eslint": "^8.49.0"
+  }
+}

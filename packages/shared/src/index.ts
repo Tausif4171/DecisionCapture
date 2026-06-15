@@ -1,0 +1,89 @@
+export type DecisionStatus = "APPROVED" | "PENDING" | "REJECTED";
+
+export interface PRContext {
+  prNumber: number;
+  title: string;
+  description?: string;
+  mergedAt?: string;
+  author: string;
+  url: string;
+  repository: string;
+  filesChanged: string[];
+  commits?: string[];
+  reviewers?: string[];
+  reviewComments?: string[];
+  approvals?: string[];
+  labels?: string[];
+  diffSummary?: string;
+}
+
+export interface DecisionScore {
+  score: number;
+  threshold: number;
+  shouldAnalyze: boolean;
+  categories: string[];
+  reasons: string[];
+}
+
+export interface ExtractedDecision {
+  decision: string;
+  reason: string;
+  alternative?: string;
+  impact: string;
+  author: string;
+  source: string;
+  confidence: number;
+  category: string;
+}
+
+export interface DecisionMemory {
+  id: string;
+  decision: string;
+  reason: string;
+  alternative?: string | null;
+  impact: string;
+  author: string;
+  sourcePR: string;
+  repository: string;
+  filesChanged: string[];
+  confidence: number;
+  status: DecisionStatus;
+  category: string;
+  prRecordId?: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface PRRecord {
+  id: string;
+  prNumber: number;
+  title: string;
+  description?: string | null;
+  mergedAt?: string | null;
+  author: string;
+  url: string;
+  repository: string;
+  createdAt: string;
+}
+
+export interface DecisionListResponse {
+  decisions: DecisionMemory[];
+  total: number;
+}
+
+export interface DecisionStats {
+  totalDecisions: number;
+  pendingDecisions: number;
+  approvedDecisions: number;
+  rejectedDecisions: number;
+  categories: Array<{ category: string; count: number }>;
+  recentDecisions: DecisionMemory[];
+}
+
+export interface AnalyzeResponse {
+  status: "ignored" | "queued" | "processed";
+  score?: DecisionScore;
+  decision?: DecisionMemory;
+  jobId?: string;
+  message: string;
+}
