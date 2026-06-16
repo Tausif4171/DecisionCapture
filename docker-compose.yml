@@ -2,13 +2,13 @@ services:
   postgres:
     image: postgres:16-alpine
     environment:
-      POSTGRES_DB: decisioncapture
-      POSTGRES_USER: decision
-      POSTGRES_PASSWORD: decision
+      POSTGRES_DB: ${POSTGRES_DB:?Set POSTGRES_DB in .env or your shell}
+      POSTGRES_USER: ${POSTGRES_USER:?Set POSTGRES_USER in .env or your shell}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env or your shell}
     volumes:
       - postgres-data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U decision -d decisioncapture"]
+      test: ["CMD-SHELL", "pg_isready -U \"$${POSTGRES_USER}\" -d \"$${POSTGRES_DB}\""]
       interval: 5s
       timeout: 5s
       retries: 20
@@ -33,7 +33,7 @@ services:
     environment:
       NODE_ENV: production
       PORT: 4000
-      DATABASE_URL: postgresql://decision:decision@postgres:5432/decisioncapture?schema=public
+      DATABASE_URL: postgresql://${POSTGRES_USER:?Set POSTGRES_USER in .env or your shell}:${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env or your shell}@postgres:5432/${POSTGRES_DB:?Set POSTGRES_DB in .env or your shell}?schema=public
       REDIS_URL: redis://redis:6379
       QUEUE_MODE: bullmq
       QUEUE_WORKER_ENABLED: "true"
@@ -46,7 +46,10 @@ services:
       DECISION_SCORE_THRESHOLD: 35
       GITHUB_WEBHOOK_SECRET: ${GITHUB_WEBHOOK_SECRET:-}
       INGEST_API_TOKEN: ${INGEST_API_TOKEN:?Set INGEST_API_TOKEN in .env or your shell}
+      DASHBOARD_API_TOKEN: ${DASHBOARD_API_TOKEN:?Set DASHBOARD_API_TOKEN in .env or your shell}
       DEMO_MODE_ENABLED: ${DEMO_MODE_ENABLED:-false}
+      RATE_LIMIT_WINDOW_MS: ${RATE_LIMIT_WINDOW_MS:-60000}
+      RATE_LIMIT_MAX_REQUESTS: ${RATE_LIMIT_MAX_REQUESTS:-120}
     ports:
       - "4000:4000"
     depends_on:
@@ -56,7 +59,7 @@ services:
         condition: service_healthy
       ollama:
         condition: service_started
-    command: ["sh", "-c", "npm run db:push -w @decisioncapture/backend && npm run start -w @decisioncapture/backend"]
+    command: ["sh", "-c", "npm run db:deploy -w @decisioncapture/backend && npm run start -w @decisioncapture/backend"]
 
   frontend:
     build:
@@ -64,7 +67,11 @@ services:
       dockerfile: apps/frontend/Dockerfile
     environment:
       NODE_ENV: production
-      NEXT_PUBLIC_API_URL: http://localhost:4000
+      API_INTERNAL_URL: http://backend:4000
+      DASHBOARD_API_TOKEN: ${DASHBOARD_API_TOKEN:?Set DASHBOARD_API_TOKEN in .env or your shell}
+      DASHBOARD_AUTH_ENABLED: ${DASHBOARD_AUTH_ENABLED:-true}
+      DASHBOARD_USERNAME: ${DASHBOARD_USERNAME:?Set DASHBOARD_USERNAME in .env or your shell}
+      DASHBOARD_PASSWORD: ${DASHBOARD_PASSWORD:?Set DASHBOARD_PASSWORD in .env or your shell}
       NEXT_PUBLIC_DEMO_MODE_ENABLED: ${NEXT_PUBLIC_DEMO_MODE_ENABLED:-false}
     ports:
       - "3088:3000"

@@ -5,6 +5,7 @@ import { pinoHttp } from "pino-http";
 import { env } from "./config/env.js";
 import { logger } from "./config/logger.js";
 import { errorHandler, notFoundHandler } from "./middleware/error.js";
+import { createRateLimiter } from "./middleware/rate-limit.js";
 import { router } from "./routes.js";
 
 const allowedOrigins = env.FRONTEND_ORIGIN.split(",").map((origin) => origin.trim());
@@ -13,10 +14,17 @@ export function createApp() {
   const app = express();
 
   app.use(helmet());
+  app.set("trust proxy", 1);
   app.use(
     cors({
       origin: allowedOrigins,
       credentials: true
+    })
+  );
+  app.use(
+    createRateLimiter({
+      maxRequests: env.RATE_LIMIT_MAX_REQUESTS,
+      windowMs: env.RATE_LIMIT_WINDOW_MS
     })
   );
   app.use(

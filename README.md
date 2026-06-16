@@ -53,7 +53,7 @@ Docker is the easiest path. Create a local `.env` first so the ingest API uses y
 cd /Users/tausif/Documents/projects/decisioncapture
 cp .env.example .env
 openssl rand -hex 32
-# Paste that generated value into .env as INGEST_API_TOKEN.
+# Paste generated values into INGEST_API_TOKEN, DASHBOARD_API_TOKEN, and DASHBOARD_PASSWORD.
 docker compose up -d
 ```
 
@@ -61,6 +61,8 @@ Open:
 
 - Frontend: http://localhost:3088
 - Backend health: http://localhost:4000/health
+
+The Docker dashboard is protected with Basic Auth when `DASHBOARD_AUTH_ENABLED=true`.
 
 For a real end-to-end check, expose the backend with a tunnel, set the GitHub Action secrets, merge a real PR, and then refresh the dashboard. The dashboard should show the repository, PR number, author, changed files, and extracted decision content from that PR.
 
@@ -89,6 +91,12 @@ npm run dev
 
 For non-Docker development, provide PostgreSQL and Redis matching `.env.example`, or point `DATABASE_URL` and `REDIS_URL` at your own services. The Docker Compose database and Redis are intentionally private to the Compose network to avoid local port conflicts.
 
+Schema changes are managed through Prisma migrations. Docker runs `npm run db:deploy` on startup. During development, create migrations with:
+
+```bash
+npm run db:migrate
+```
+
 ## Environment Variables
 
 | Variable | Purpose |
@@ -99,12 +107,18 @@ For non-Docker development, provide PostgreSQL and Redis matching `.env.example`
 | `QUEUE_WORKER_ENABLED` | Starts the worker inside the backend process when true. |
 | `GITHUB_WEBHOOK_SECRET` | HMAC secret for GitHub webhook signature verification. |
 | `INGEST_API_TOKEN` | Bearer token required by `/decisions/analyze` in Docker/production-style runs. |
+| `DASHBOARD_API_TOKEN` | Private server-to-server token used by the frontend proxy to read/update decisions. |
 | `DEMO_MODE_ENABLED` | Enables the sample demo endpoint when explicitly set to `true`. |
+| `RATE_LIMIT_WINDOW_MS` | Rate-limit window for backend requests. |
+| `RATE_LIMIT_MAX_REQUESTS` | Maximum backend requests per client per window. |
 | `AI_PROVIDER` | `ollama` or `heuristic`. |
 | `OLLAMA_BASE_URL` | Ollama API URL. In Docker this is `http://ollama:11434`. |
 | `OLLAMA_MODEL` | Ollama model name, default `llama3.1`. |
 | `USE_HEURISTIC_AI_FALLBACK` | Falls back to deterministic extraction if Ollama is unavailable. |
-| `NEXT_PUBLIC_API_URL` | Browser-facing backend URL for the frontend. |
+| `API_INTERNAL_URL` | Server-side backend URL used by the Next.js API proxy. |
+| `DASHBOARD_AUTH_ENABLED` | Enables Basic Auth for the dashboard and frontend API proxy. |
+| `DASHBOARD_USERNAME` | Dashboard Basic Auth username. |
+| `DASHBOARD_PASSWORD` | Dashboard Basic Auth password. |
 | `NEXT_PUBLIC_DEMO_MODE_ENABLED` | Shows the frontend demo button when explicitly set to `true`. |
 
 To use a real Ollama model in Docker:
@@ -118,8 +132,8 @@ The MVP still works before that pull because the backend falls back to the heuri
 ## API
 
 - `POST /github/webhook` receives GitHub `pull_request.closed` events and only analyzes merged PRs.
-- `POST /decisions/analyze` analyzes full PR context from the GitHub Action or manual ingestion.
-- `GET /decisions` searches decisions by keyword, status, repository, category, and sort.
+- `POST /decisions/analyze` analyzes full PR context from the GitHub Action or manual ingestion. Add `?wait=true` when the caller needs an immediate processed result.
+- `GET /decisions` searches decisions by keyword, status, repository, category, and sort. Dashboard routes require `DASHBOARD_API_TOKEN` when configured.
 - `GET /decisions/stats` returns dashboard metrics and recent decisions.
 - `GET /decisions/:id` returns a decision detail record.
 - `PATCH /decisions/:id/approve` approves a pending decision and optional edits.
@@ -145,8 +159,11 @@ Configure repository secrets:
 
 - `DECISIONCAPTURE_API_URL`, for example `https://your-api.example.com`
 - `DECISIONCAPTURE_TOKEN`, matching `INGEST_API_TOKEN`
+- `DECISIONCAPTURE_APP_URL`, optional dashboard URL used in pending-decision PR comments
 
-If you want to test this from a local machine, expose the backend with a tunnel and use that public URL as `DECISIONCAPTURE_API_URL`.
+The workflow collects PR metadata, a bounded diff summary, review data, labels, approvals, and changed files. If DecisionCapture returns a pending decision, the workflow comments on the PR with a dashboard review link.
+
+If you want to test this from a local machine, expose the backend with a tunnel and use that public URL as `DECISIONCAPTURE_API_URL`. Use the frontend URL as `DECISIONCAPTURE_APP_URL` if it is reachable by your team.
 
 For direct webhooks, set the GitHub webhook secret to match `GITHUB_WEBHOOK_SECRET`.
 
@@ -158,10 +175,10 @@ Recommended local verification:
 npm run typecheck
 npm run lint
 npm run test
+npm run build
 docker compose config
 docker compose up -d
 curl http://localhost:4000/health
-curl http://localhost:4000/decisions
 ```
 
 Recommended end-to-end verification is a merged GitHub PR through `.github/workflows/decisioncapture.yml`. Keep the backend and tunnel running, set `DECISIONCAPTURE_API_URL` and `DECISIONCAPTURE_TOKEN` in GitHub Actions secrets, merge a PR, then confirm the dashboard shows that real PR.

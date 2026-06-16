@@ -16,7 +16,8 @@ function decisionId(request: Request) {
 
 export async function analyzeDecision(request: Request, response: Response) {
   const context = prContextSchema.parse(request.body);
-  const result = await analyzeOrQueue(context);
+  const shouldWait = request.query.wait === "true";
+  const result = shouldWait ? await decisionService.analyzePrContext(context) : await analyzeOrQueue(context);
   return response.status(result.status === "queued" ? 202 : 200).json(result);
 }
 
