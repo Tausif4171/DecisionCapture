@@ -19,6 +19,10 @@ export async function githubWebhook(request: Request, response: Response) {
   const signature = request.header("x-hub-signature-256");
   const rawBody = request.rawBody ?? JSON.stringify(request.body);
 
+  if (!env.GITHUB_WEBHOOK_SECRET) {
+    throw new HttpError(503, "GitHub webhook secret is not configured");
+  }
+
   if (!verifyGitHubSignature(rawBody, signature, env.GITHUB_WEBHOOK_SECRET)) {
     throw new HttpError(401, "Invalid GitHub webhook signature");
   }

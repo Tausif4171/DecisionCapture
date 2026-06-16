@@ -42,6 +42,34 @@ describe("scoreDecisionContext", () => {
 
     expect(result.shouldAnalyze).toBe(false);
   });
+
+  it("scores structured PR decision notes without treating a generic queue mention as infrastructure", () => {
+    const result = scoreDecisionContext(
+      {
+        ...baseContext,
+        title: "Add decision audit event helper",
+        description: `
+Decision:
+Add a small backend observability helper.
+
+Reason:
+Merged PR analysis needs structured audit events.
+
+Alternative:
+Use raw log strings inside queue and webhook handlers.
+
+Impact:
+Decision capture events stay consistent.
+        `,
+        filesChanged: ["apps/backend/src/modules/observability/decision-audit.ts"]
+      },
+      35
+    );
+
+    expect(result.shouldAnalyze).toBe(true);
+    expect(result.categories).toContain("architecture");
+    expect(result.categories).not.toContain("infrastructure");
+  });
 });
 
 describe("resolveDecisionStatus", () => {

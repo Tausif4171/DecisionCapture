@@ -2,6 +2,7 @@ import type { DecisionScore, ExtractedDecision, PRContext } from "@decisioncaptu
 import { z } from "zod";
 import { env } from "../../config/env.js";
 import { logger } from "../../config/logger.js";
+import { hasStructuredDecisionSections } from "./heuristic.provider.js";
 import type { AIProvider } from "./provider.js";
 
 const extractedDecisionSchema = z.object({
@@ -54,6 +55,10 @@ export class OllamaAIProvider implements AIProvider {
   constructor(private readonly fallback?: AIProvider) {}
 
   async extractDecision(context: PRContext, score: DecisionScore): Promise<ExtractedDecision> {
+    if (this.fallback && hasStructuredDecisionSections(context.description)) {
+      return this.fallback.extractDecision(context, score);
+    }
+
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 25_000);
 

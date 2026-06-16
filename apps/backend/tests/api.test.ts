@@ -1,6 +1,5 @@
 import type { Request, Response } from "express";
-import { describe, expect, it } from "vitest";
-import { githubWebhook } from "../src/modules/github/controller.js";
+import { describe, expect, it, vi } from "vitest";
 import { createGitHubSignature } from "../src/modules/github/signature.js";
 
 type MockResponse = Response & {
@@ -40,6 +39,10 @@ function createMockRequest(body: unknown, headers: Record<string, string>): Requ
 
 describe("GitHub webhook API", () => {
   it("ignores unmerged pull_request.closed events", async () => {
+    vi.resetModules();
+    const webhookSecret = "test-webhook-secret";
+    process.env.GITHUB_WEBHOOK_SECRET = webhookSecret;
+    const { githubWebhook } = await import("../src/modules/github/controller.js");
     const body = {
       action: "closed",
       repository: {
@@ -63,7 +66,7 @@ describe("GitHub webhook API", () => {
     const response = createMockResponse();
     const request = createMockRequest(body, {
       "x-github-event": "pull_request",
-      "x-hub-signature-256": createGitHubSignature(rawBody, "change-me")
+      "x-hub-signature-256": createGitHubSignature(rawBody, webhookSecret)
     });
 
     await githubWebhook(request, response);

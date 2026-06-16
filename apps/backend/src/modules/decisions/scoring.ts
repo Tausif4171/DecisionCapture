@@ -18,6 +18,12 @@ function textFor(context: PRContext) {
     .toLowerCase();
 }
 
+function hasDecisionSections(description?: string) {
+  return /(^|\n)\s*(#{1,6}\s*)?[-*]?\s*(decision|reason|rationale|alternative|alternatives|impact|outcome)\s*:/i.test(
+    description ?? ""
+  );
+}
+
 function addSignal(
   condition: boolean,
   amount: number,
@@ -42,6 +48,14 @@ export function scoreDecisionContext(context: PRContext, threshold = 35): Decisi
     categories: new Set<string>(),
     reasons: [] as string[]
   };
+
+  addSignal(
+    hasDecisionSections(context.description),
+    35,
+    "architecture",
+    "Structured decision notes included in PR description",
+    state
+  );
 
   addSignal(
     files.some((file) => /(^|\/)(prisma|migrations|schema)|\.(sql|prisma)$/i.test(file)),
@@ -94,8 +108,8 @@ export function scoreDecisionContext(context: PRContext, threshold = 35): Decisi
   );
 
   addSignal(
-    files.some((file) => /(Dockerfile|docker-compose|k8s|helm|terraform|infra|deploy|redis|bullmq|queue)/i.test(file)) ||
-      /\b(redis|docker|deploy|queue|bullmq|kubernetes|terraform)\b/i.test(text),
+    files.some((file) => /(Dockerfile|docker-compose|k8s|helm|terraform|infra|deploy|redis|bullmq)/i.test(file)) ||
+      /\b(redis|docker|deploy|bullmq|kubernetes|terraform)\b/i.test(text),
     15,
     "infrastructure",
     "Infrastructure or deployment behavior changed",

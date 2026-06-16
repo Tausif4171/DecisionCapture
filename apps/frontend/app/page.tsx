@@ -15,6 +15,8 @@ const metricIcons = {
   rejected: XCircle
 };
 
+const demoModeEnabled = process.env.NEXT_PUBLIC_DEMO_MODE_ENABLED === "true";
+
 export default function DashboardPage() {
   const statsQuery = useQuery({
     queryKey: ["stats"],
@@ -47,7 +49,7 @@ export default function DashboardPage() {
             DecisionCapture scores merged pull requests, extracts the reason behind meaningful technical changes, and keeps low-confidence memories in review.
           </p>
         </div>
-        <DemoButton />
+        {demoModeEnabled ? <DemoButton /> : null}
       </section>
 
       <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
@@ -83,7 +85,7 @@ export default function DashboardPage() {
           ) : (
             <EmptyState
               title="No decisions captured yet"
-              description="Run the demo PR or send a merged PR payload to start building the memory layer."
+              description="Send a merged PR payload from GitHub Actions or webhook ingestion to start building the memory layer."
             />
           )}
         </div>

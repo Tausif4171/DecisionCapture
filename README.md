@@ -47,10 +47,13 @@ decisioncapture/
 
 ## Quick Start With Docker
 
-Docker is the easiest path. It does not require a local `.env` file because `docker-compose.yml` provides the service environment.
+Docker is the easiest path. Create a local `.env` first so the ingest API uses your real secret token instead of any committed value.
 
 ```bash
 cd /Users/tausif/Documents/projects/decisioncapture
+cp .env.example .env
+openssl rand -hex 32
+# Paste that generated value into .env as INGEST_API_TOKEN.
 docker compose up -d
 ```
 
@@ -59,13 +62,7 @@ Open:
 - Frontend: http://localhost:3088
 - Backend health: http://localhost:4000/health
 
-Run the local demo PR:
-
-```bash
-curl -X POST http://localhost:4000/demo/pr
-```
-
-The worker will process a fake merged PR and the dashboard will show an approved decision: “Use a Redis-backed queue for asynchronous PR analysis”.
+For a real end-to-end check, expose the backend with a tunnel, set the GitHub Action secrets, merge a real PR, and then refresh the dashboard. The dashboard should show the repository, PR number, author, changed files, and extracted decision content from that PR.
 
 Stop the stack:
 
@@ -73,7 +70,7 @@ Stop the stack:
 docker compose down
 ```
 
-Reset all local demo/test data:
+Reset all local data:
 
 ```bash
 docker compose down -v
@@ -101,12 +98,14 @@ For non-Docker development, provide PostgreSQL and Redis matching `.env.example`
 | `QUEUE_MODE` | `inline` for local direct processing, `bullmq` for queued processing. |
 | `QUEUE_WORKER_ENABLED` | Starts the worker inside the backend process when true. |
 | `GITHUB_WEBHOOK_SECRET` | HMAC secret for GitHub webhook signature verification. |
-| `INGEST_API_TOKEN` | Optional token required by `/decisions/analyze`. |
+| `INGEST_API_TOKEN` | Bearer token required by `/decisions/analyze` in Docker/production-style runs. |
+| `DEMO_MODE_ENABLED` | Enables the sample demo endpoint when explicitly set to `true`. |
 | `AI_PROVIDER` | `ollama` or `heuristic`. |
 | `OLLAMA_BASE_URL` | Ollama API URL. In Docker this is `http://ollama:11434`. |
 | `OLLAMA_MODEL` | Ollama model name, default `llama3.1`. |
 | `USE_HEURISTIC_AI_FALLBACK` | Falls back to deterministic extraction if Ollama is unavailable. |
 | `NEXT_PUBLIC_API_URL` | Browser-facing backend URL for the frontend. |
+| `NEXT_PUBLIC_DEMO_MODE_ENABLED` | Shows the frontend demo button when explicitly set to `true`. |
 
 To use a real Ollama model in Docker:
 
@@ -125,7 +124,7 @@ The MVP still works before that pull because the backend falls back to the heuri
 - `GET /decisions/:id` returns a decision detail record.
 - `PATCH /decisions/:id/approve` approves a pending decision and optional edits.
 - `PATCH /decisions/:id/reject` rejects a pending decision.
-- `POST /demo/pr` queues a sample merged PR for local demo testing.
+- `POST /demo/pr` queues a sample merged PR only when `DEMO_MODE_ENABLED=true`.
 
 ## GitHub Integration
 
@@ -153,22 +152,21 @@ For direct webhooks, set the GitHub webhook secret to match `GITHUB_WEBHOOK_SECR
 
 ## Verification
 
-Commands run successfully during this build:
+Recommended local verification:
 
 ```bash
 npm run typecheck
 npm run lint
 npm run test
-npm run build
 docker compose config
-docker compose build backend frontend
 docker compose up -d
 curl http://localhost:4000/health
-curl -X POST http://localhost:4000/demo/pr
 curl http://localhost:4000/decisions
 ```
 
-The dashboard was also verified in the in-app browser at `http://localhost:3088`: stats rendered, the Redis queue decision appeared, search for `Redis` worked, and the decision detail page opened without console errors.
+Recommended end-to-end verification is a merged GitHub PR through `.github/workflows/decisioncapture.yml`. Keep the backend and tunnel running, set `DECISIONCAPTURE_API_URL` and `DECISIONCAPTURE_TOKEN` in GitHub Actions secrets, merge a PR, then confirm the dashboard shows that real PR.
+
+The sample demo endpoint is intentionally disabled by default so production-like testing does not create fake records. To enable it locally, set both `DEMO_MODE_ENABLED=true` and `NEXT_PUBLIC_DEMO_MODE_ENABLED=true`, rebuild backend/frontend, then call `POST /demo/pr`.
 
 ## Future Memory Store MCP Integration
 
