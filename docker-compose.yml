@@ -44,8 +44,8 @@ services:
       USE_HEURISTIC_AI_FALLBACK: "true"
       AUTO_APPROVE_CONFIDENCE: 0.78
       DECISION_SCORE_THRESHOLD: 35
-      GITHUB_WEBHOOK_SECRET: change-me
-      INGEST_API_TOKEN: local-demo-token
+      GITHUB_WEBHOOK_SECRET: ${GITHUB_WEBHOOK_SECRET:-change-me}
+      INGEST_API_TOKEN: ${INGEST_API_TOKEN:-local-demo-token}
     ports:
       - "4000:4000"
     depends_on:

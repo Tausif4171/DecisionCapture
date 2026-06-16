@@ -47,5 +47,6 @@ jobs:
 
           curl -fsS -X POST "$DECISIONCAPTURE_API_URL/decisions/analyze" \
             -H "content-type: application/json" \
+            -H "ngrok-skip-browser-warning: true" \
             -H "x-decisioncapture-token: $DECISIONCAPTURE_TOKEN" \
             --data @payload.json

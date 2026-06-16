@@ -2,6 +2,7 @@ import type {
   AnalyzeResponse,
   DecisionListResponse,
   DecisionMemory,
+  DecisionStatus,
   DecisionStats,
   PRContext
 } from "@decisioncapture/shared";
@@ -91,24 +92,38 @@ export class DecisionService {
     });
 
     const extracted = await this.aiProvider.extractDecision(context, score);
-    const status = resolveDecisionStatus(extracted.confidence, env.AUTO_APPROVE_CONFIDENCE);
+    const status = resolveDecisionStatus(extracted.confidence, env.AUTO_APPROVE_CONFIDENCE) as DecisionStatus;
 
-    const decision = await prisma.decisionMemory.create({
-      data: {
-        decision: extracted.decision,
-        reason: extracted.reason,
-        alternative: extracted.alternative,
-        impact: extracted.impact,
-        author: extracted.author,
-        sourcePR: extracted.source,
-        repository: context.repository,
-        filesChanged: context.filesChanged,
-        confidence: extracted.confidence,
-        status,
-        category: extracted.category,
-        prRecordId: prRecord.id
-      }
+    const existingDecision = await prisma.decisionMemory.findFirst({
+      where: { prRecordId: prRecord.id },
+      orderBy: { createdAt: "asc" }
     });
+
+    const decisionPayload = {
+      decision: extracted.decision,
+      reason: extracted.reason,
+      alternative: extracted.alternative,
+      impact: extracted.impact,
+      author: extracted.author,
+      sourcePR: extracted.source,
+      repository: context.repository,
+      filesChanged: context.filesChanged,
+      confidence: extracted.confidence,
+      status,
+      category: extracted.category
+    };
+
+    const decision = existingDecision
+      ? await prisma.decisionMemory.update({
+          where: { id: existingDecision.id },
+          data: decisionPayload
+        })
+      : await prisma.decisionMemory.create({
+          data: {
+            ...decisionPayload,
+            prRecordId: prRecord.id
+          }
+        });
 
     return {
       status: "processed",
