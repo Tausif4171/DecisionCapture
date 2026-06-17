@@ -1,5 +1,13 @@
 import { z } from "zod";
 
+const stringArraySchema = z
+  .array(z.union([z.string(), z.null()]))
+  .optional()
+  .default([])
+  .transform((values) =>
+    values.filter((value): value is string => typeof value === "string" && value.trim().length > 0)
+  );
+
 export const prContextSchema = z.object({
   prNumber: z.number().int().positive(),
   title: z.string().min(1),
@@ -8,12 +16,12 @@ export const prContextSchema = z.object({
   author: z.string().min(1),
   url: z.string().url(),
   repository: z.string().min(1),
-  filesChanged: z.array(z.string()).default([]),
-  commits: z.array(z.string()).optional().default([]),
-  reviewers: z.array(z.string()).optional().default([]),
-  reviewComments: z.array(z.string()).optional().default([]),
-  approvals: z.array(z.string()).optional().default([]),
-  labels: z.array(z.string()).optional().default([]),
+  filesChanged: stringArraySchema,
+  commits: stringArraySchema,
+  reviewers: stringArraySchema,
+  reviewComments: stringArraySchema,
+  approvals: stringArraySchema,
+  labels: stringArraySchema,
   diffSummary: z.string().optional().default("")
 });
 

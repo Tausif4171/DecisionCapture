@@ -38,12 +38,12 @@ jobs:
             author: .author.login,
             url: .url,
             repository: env.GITHUB_REPOSITORY,
-            filesChanged: [.files[].path],
-            commits: [.commits[].messageHeadline],
-            reviewers: [.reviews[].author.login],
-            reviewComments: [.reviews[].body],
-            approvals: [.reviews[] | select(.state == "APPROVED") | .author.login],
-            labels: [.labels[].name],
+            filesChanged: [.files[].path? | select(type == "string" and length > 0)],
+            commits: [.commits[].messageHeadline? | select(type == "string" and length > 0)],
+            reviewers: [.reviews[].author.login? | select(type == "string" and length > 0)],
+            reviewComments: [.reviews[].body? | select(type == "string" and length > 0)],
+            approvals: [.reviews[] | select(.state == "APPROVED") | .author.login? | select(type == "string" and length > 0)],
+            labels: [.labels[].name? | select(type == "string" and length > 0)],
             diffSummary: ($diff | split("\n") | map(select(
               startswith("diff --git") or
               startswith("@@") or
