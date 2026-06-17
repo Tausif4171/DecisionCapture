@@ -4,6 +4,7 @@ import type {
   DecisionMemory,
   DecisionStats
 } from "@decisioncapture/shared";
+import type { DecisionReviewDraft } from "./decision-review";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4000";
 
@@ -59,15 +60,26 @@ export function getDecision(id: string) {
   return request<DecisionMemory>(`/decisions/${id}`);
 }
 
-export function approveDecision(id: string, body: Partial<DecisionMemory>) {
+function toDecisionReviewBody(body: DecisionReviewDraft) {
+  return {
+    decision: body.decision,
+    reason: body.reason,
+    alternative: body.alternative,
+    impact: body.impact
+  };
+}
+
+export function updateDecision(id: string, body: DecisionReviewDraft) {
+  return request<DecisionMemory>(`/decisions/${id}`, {
+    method: "PATCH",
+    body: JSON.stringify(toDecisionReviewBody(body))
+  });
+}
+
+export function approveDecision(id: string, body: DecisionReviewDraft) {
   return request<DecisionMemory>(`/decisions/${id}/approve`, {
     method: "PATCH",
-    body: JSON.stringify({
-      decision: body.decision,
-      reason: body.reason,
-      alternative: body.alternative,
-      impact: body.impact
-    })
+    body: JSON.stringify(toDecisionReviewBody(body))
   });
 }
 

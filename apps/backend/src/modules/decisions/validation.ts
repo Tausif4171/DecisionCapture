@@ -34,7 +34,7 @@ export const decisionSearchSchema = z.object({
   limit: z.coerce.number().int().min(1).max(100).optional().default(30)
 });
 
-export const approveDecisionSchema = z.object({
+export const decisionReviewSchema = z.object({
   decision: z.string().min(1).optional(),
   reason: z.string().min(1).optional(),
   alternative: z.string().optional().nullable(),

@@ -3,7 +3,7 @@ import { HttpError } from "../../middleware/error.js";
 import { analyzeOrQueue } from "../queue/service.js";
 import { processDecisionContext, syncDecisionNotificationFromStoredContext } from "./processor.js";
 import { decisionService } from "./service.js";
-import { approveDecisionSchema, decisionSearchSchema, prContextSchema } from "./validation.js";
+import { decisionReviewSchema, decisionSearchSchema, prContextSchema } from "./validation.js";
 
 function decisionId(request: Request) {
   const id = request.params.id;
@@ -43,8 +43,15 @@ export async function getDecision(request: Request, response: Response) {
   return response.json(decision);
 }
 
+export async function updateDecision(request: Request, response: Response) {
+  const updates = decisionReviewSchema.parse(request.body);
+  const decision = await decisionService.updateDecision(decisionId(request), updates);
+  await syncDecisionNotificationFromStoredContext(decision);
+  return response.json(decision);
+}
+
 export async function approveDecision(request: Request, response: Response) {
-  const updates = approveDecisionSchema.parse(request.body);
+  const updates = decisionReviewSchema.parse(request.body);
   const decision = await decisionService.approveDecision(decisionId(request), updates);
   await syncDecisionNotificationFromStoredContext(decision);
   return response.json(decision);

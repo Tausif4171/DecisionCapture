@@ -7,7 +7,8 @@ import {
   decisionStats,
   getDecision,
   listDecisions,
-  rejectDecision
+  rejectDecision,
+  updateDecision
 } from "./controller.js";
 
 export const decisionsRouter = Router();
@@ -16,5 +17,6 @@ decisionsRouter.post("/analyze", requireIngestToken, asyncHandler(analyzeDecisio
 decisionsRouter.get("/", asyncHandler(listDecisions));
 decisionsRouter.get("/stats", asyncHandler(decisionStats));
 decisionsRouter.get("/:id", asyncHandler(getDecision));
+decisionsRouter.patch("/:id", asyncHandler(updateDecision));
 decisionsRouter.patch("/:id/approve", asyncHandler(approveDecision));
 decisionsRouter.patch("/:id/reject", asyncHandler(rejectDecision));

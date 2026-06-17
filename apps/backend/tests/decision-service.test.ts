@@ -200,6 +200,38 @@ describe("DecisionService", () => {
     expect(result.status).toBe("APPROVED");
   });
 
+  it("updates a pending decision without changing its review status", async () => {
+    const service = new DecisionService({
+      extractDecision: vi.fn()
+    });
+
+    mockPrisma.decisionMemory.update.mockResolvedValue(
+      buildDecisionRecord({
+        id: "decision-draft",
+        decision: "Log BullMQ worker startup for async decision processing",
+        reason: "Startup visibility helps verify that queue processing is active before merged PRs arrive.",
+        impact: "Reviewers can confirm pending decisions are backed by a running worker.",
+        status: "PENDING"
+      })
+    );
+
+    const result = await service.updateDecision("decision-draft", {
+      decision: "Log BullMQ worker startup for async decision processing",
+      reason: "Startup visibility helps verify that queue processing is active before merged PRs arrive.",
+      impact: "Reviewers can confirm pending decisions are backed by a running worker."
+    });
+
+    expect(mockPrisma.decisionMemory.update).toHaveBeenCalledWith({
+      where: { id: "decision-draft" },
+      data: {
+        decision: "Log BullMQ worker startup for async decision processing",
+        reason: "Startup visibility helps verify that queue processing is active before merged PRs arrive.",
+        impact: "Reviewers can confirm pending decisions are backed by a running worker."
+      }
+    });
+    expect(result.status).toBe("PENDING");
+  });
+
   it("rejects a pending decision", async () => {
     const service = new DecisionService({
       extractDecision: vi.fn()

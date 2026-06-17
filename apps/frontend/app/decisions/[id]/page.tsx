@@ -1,11 +1,16 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import { useParams } from "next/navigation";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Check, ExternalLink, GitBranch, Save, ShieldCheck, UserRound, X } from "lucide-react";
-import type { DecisionMemory } from "@decisioncapture/shared";
-import { approveDecision, getDecision, rejectDecision } from "../../../lib/api";
+import { approveDecision, getDecision, rejectDecision, updateDecision } from "../../../lib/api";
+import {
+  hasDecisionReviewChanges,
+  hasRequiredDecisionReviewFields,
+  toDecisionReviewDraft,
+  type DecisionReviewDraft
+} from "../../../lib/decision-review";
 import { ErrorState, LoadingState } from "../../components/state-views";
 import { StatusBadge } from "../../components/status-badge";
 
@@ -22,21 +27,35 @@ export default function DecisionDetailPage() {
   const params = useParams<{ id: string }>();
   const queryClient = useQueryClient();
   const [isEditing, setIsEditing] = useState(false);
+  const [draft, setDraft] = useState<DecisionReviewDraft | null>(null);
 
   const decisionQuery = useQuery({
     queryKey: ["decision", params.id],
     queryFn: () => getDecision(params.id)
   });
 
-  const [draft, setDraft] = useState<Partial<DecisionMemory>>({});
   const decision = decisionQuery.data;
-  const formValue = useMemo(() => ({ ...decision, ...draft }), [decision, draft]);
+  const formValue = draft ?? (decision ? toDecisionReviewDraft(decision) : null);
+  const isPendingDecision = decision?.status === "PENDING";
+  const isDirty = decision && formValue ? hasDecisionReviewChanges(decision, formValue) : false;
+  const hasRequiredFields = formValue ? hasRequiredDecisionReviewFields(formValue) : false;
 
-  const approveMutation = useMutation({
-    mutationFn: () => approveDecision(params.id, formValue),
+  const updateMutation = useMutation({
+    mutationFn: () => updateDecision(params.id, formValue!),
     onSuccess: async () => {
       setIsEditing(false);
-      setDraft({});
+      setDraft(null);
+      await queryClient.invalidateQueries({ queryKey: ["decision", params.id] });
+      await queryClient.invalidateQueries({ queryKey: ["decisions"] });
+      await queryClient.invalidateQueries({ queryKey: ["stats"] });
+    }
+  });
+
+  const approveMutation = useMutation({
+    mutationFn: () => approveDecision(params.id, formValue!),
+    onSuccess: async () => {
+      setIsEditing(false);
+      setDraft(null);
       await queryClient.invalidateQueries({ queryKey: ["decision", params.id] });
       await queryClient.invalidateQueries({ queryKey: ["decisions"] });
       await queryClient.invalidateQueries({ queryKey: ["stats"] });
@@ -51,6 +70,38 @@ export default function DecisionDetailPage() {
       await queryClient.invalidateQueries({ queryKey: ["stats"] });
     }
   });
+
+  const isBusy = updateMutation.isPending || approveMutation.isPending || rejectMutation.isPending;
+  const actionError = updateMutation.error ?? approveMutation.error ?? rejectMutation.error;
+
+  function startEditing() {
+    if (!decision) {
+      return;
+    }
+
+    if (updateMutation.isSuccess) {
+      updateMutation.reset();
+    }
+
+    setDraft(toDecisionReviewDraft(decision));
+    setIsEditing(true);
+  }
+
+  function cancelEditing() {
+    setIsEditing(false);
+    setDraft(null);
+  }
+
+  function updateDraftField(
+    field: "decision" | "reason" | "alternative" | "impact",
+    value: string
+  ) {
+    if (updateMutation.isSuccess) {
+      updateMutation.reset();
+    }
+
+    setDraft((current) => (current ? { ...current, [field]: value } : current));
+  }
 
   if (decisionQuery.isLoading) {
     return <LoadingState label="Loading decision" />;
@@ -74,8 +125,8 @@ export default function DecisionDetailPage() {
             </div>
             {isEditing ? (
               <textarea
-                value={formValue.decision ?? ""}
-                onChange={(event) => setDraft((current) => ({ ...current, decision: event.target.value }))}
+                value={formValue?.decision ?? ""}
+                onChange={(event) => updateDraftField("decision", event.target.value)}
                 className="min-h-24 w-full rounded-md border border-neutral-200 p-3 text-xl font-semibold text-neutral-950 outline-none focus:border-neutral-400"
               />
             ) : (
@@ -85,17 +136,29 @@ export default function DecisionDetailPage() {
           <div className="flex flex-wrap gap-2">
             <button
               type="button"
-              onClick={() => setIsEditing((current) => !current)}
+              onClick={isEditing ? cancelEditing : startEditing}
               className="inline-flex min-h-10 items-center gap-2 rounded-md border border-neutral-200 px-3 py-2 text-sm font-medium text-neutral-700 transition hover:bg-neutral-50"
               title={isEditing ? "Cancel editing" : "Edit decision"}
             >
               {isEditing ? <X className="size-4" aria-hidden="true" /> : <Save className="size-4" aria-hidden="true" />}
               {isEditing ? "Cancel" : "Edit"}
             </button>
+            {isEditing ? (
+              <button
+                type="button"
+                onClick={() => updateMutation.mutate()}
+                disabled={!isDirty || !hasRequiredFields || isBusy}
+                className="inline-flex min-h-10 items-center gap-2 rounded-md border border-neutral-200 px-3 py-2 text-sm font-medium text-neutral-700 transition hover:bg-neutral-50 disabled:text-neutral-400"
+                title={isPendingDecision ? "Save draft without approving" : "Save decision changes"}
+              >
+                <Save className="size-4" aria-hidden="true" />
+                {isPendingDecision ? "Save draft" : "Save changes"}
+              </button>
+            ) : null}
             <button
               type="button"
               onClick={() => approveMutation.mutate()}
-              disabled={approveMutation.isPending}
+              disabled={!hasRequiredFields || isBusy}
               className="inline-flex min-h-10 items-center gap-2 rounded-md bg-emerald-600 px-3 py-2 text-sm font-semibold text-white transition hover:bg-emerald-700 disabled:bg-emerald-300"
               title="Approve decision"
             >
@@ -105,7 +168,7 @@ export default function DecisionDetailPage() {
             <button
               type="button"
               onClick={() => rejectMutation.mutate()}
-              disabled={rejectMutation.isPending}
+              disabled={isBusy}
               className="inline-flex min-h-10 items-center gap-2 rounded-md border border-neutral-200 px-3 py-2 text-sm font-medium text-neutral-700 transition hover:bg-neutral-50 disabled:text-neutral-400"
               title="Reject decision"
             >
@@ -114,6 +177,15 @@ export default function DecisionDetailPage() {
             </button>
           </div>
         </div>
+        {actionError instanceof Error ? (
+          <p className="mt-3 text-sm text-red-600">{actionError.message}</p>
+        ) : updateMutation.isSuccess ? (
+          <p className="mt-3 text-sm text-neutral-500">
+            {isPendingDecision
+              ? "Draft saved. This decision remains pending until you approve or reject it."
+              : "Changes saved."}
+          </p>
+        ) : null}
       </section>
 
       <section className="grid gap-5 lg:grid-cols-[1.5fr_1fr]">
@@ -123,24 +195,24 @@ export default function DecisionDetailPage() {
               <label className="block">
                 <span className="text-xs font-semibold uppercase tracking-normal text-neutral-500">Reason</span>
                 <textarea
-                  value={formValue.reason ?? ""}
-                  onChange={(event) => setDraft((current) => ({ ...current, reason: event.target.value }))}
+                  value={formValue?.reason ?? ""}
+                  onChange={(event) => updateDraftField("reason", event.target.value)}
                   className="mt-1 min-h-28 w-full rounded-md border border-neutral-200 p-3 text-sm outline-none focus:border-neutral-400"
                 />
               </label>
               <label className="block">
                 <span className="text-xs font-semibold uppercase tracking-normal text-neutral-500">Alternative</span>
                 <textarea
-                  value={formValue.alternative ?? ""}
-                  onChange={(event) => setDraft((current) => ({ ...current, alternative: event.target.value }))}
+                  value={formValue?.alternative ?? ""}
+                  onChange={(event) => updateDraftField("alternative", event.target.value)}
                   className="mt-1 min-h-20 w-full rounded-md border border-neutral-200 p-3 text-sm outline-none focus:border-neutral-400"
                 />
               </label>
               <label className="block">
                 <span className="text-xs font-semibold uppercase tracking-normal text-neutral-500">Impact</span>
                 <textarea
-                  value={formValue.impact ?? ""}
-                  onChange={(event) => setDraft((current) => ({ ...current, impact: event.target.value }))}
+                  value={formValue?.impact ?? ""}
+                  onChange={(event) => updateDraftField("impact", event.target.value)}
                   className="mt-1 min-h-24 w-full rounded-md border border-neutral-200 p-3 text-sm outline-none focus:border-neutral-400"
                 />
               </label>

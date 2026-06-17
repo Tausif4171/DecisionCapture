@@ -7,7 +7,7 @@ export type DecisionSearchOptions = {
   limit?: number;
 };
 
-export type DecisionApprovalUpdates = {
+export type DecisionReviewUpdates = {
   decision?: string;
   reason?: string;
   alternative?: string | null;

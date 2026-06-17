@@ -6,14 +6,15 @@ import type {
   DecisionStats,
   PRContext
 } from "@decisioncapture/shared";
-import type { Prisma } from "@prisma/client";
+import { Prisma } from "@prisma/client";
 import { env } from "../../config/env.js";
+import { HttpError } from "../../middleware/error.js";
 import { prisma } from "../database/prisma.js";
 import type { DecisionMemoryRecord } from "../database/types.js";
 import { createAIProvider } from "../ai/index.js";
 import type { AIProvider } from "../ai/provider.js";
 import { resolveDecisionStatus, scoreDecisionContext } from "./scoring.js";
-import type { DecisionApprovalUpdates, DecisionSearchOptions } from "./types.js";
+import type { DecisionReviewUpdates, DecisionSearchOptions } from "./types.js";
 
 function toDecisionMemory(decision: DecisionMemoryRecord): DecisionMemory {
   return {
@@ -25,6 +26,10 @@ function toDecisionMemory(decision: DecisionMemoryRecord): DecisionMemory {
 
 function mergedAtDate(context: PRContext) {
   return context.mergedAt ? new Date(context.mergedAt) : undefined;
+}
+
+function isMissingDecisionError(error: unknown) {
+  return error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2025";
 }
 
 export class DecisionService {
@@ -170,30 +175,60 @@ export class DecisionService {
     return decision ? toDecisionMemory(decision) : null;
   }
 
-  async approveDecision(
-    id: string,
-    updates: DecisionApprovalUpdates
-  ): Promise<DecisionMemory> {
-    const decision = await prisma.decisionMemory.update({
-      where: { id },
-      data: {
-        ...updates,
-        status: "APPROVED"
-      }
-    });
+  async updateDecision(id: string, updates: DecisionReviewUpdates): Promise<DecisionMemory> {
+    try {
+      const decision = await prisma.decisionMemory.update({
+        where: { id },
+        data: updates
+      });
 
-    return toDecisionMemory(decision);
+      return toDecisionMemory(decision);
+    } catch (error) {
+      if (isMissingDecisionError(error)) {
+        throw new HttpError(404, "Decision not found");
+      }
+
+      throw error;
+    }
+  }
+
+  async approveDecision(id: string, updates: DecisionReviewUpdates): Promise<DecisionMemory> {
+    try {
+      const decision = await prisma.decisionMemory.update({
+        where: { id },
+        data: {
+          ...updates,
+          status: "APPROVED"
+        }
+      });
+
+      return toDecisionMemory(decision);
+    } catch (error) {
+      if (isMissingDecisionError(error)) {
+        throw new HttpError(404, "Decision not found");
+      }
+
+      throw error;
+    }
   }
 
   async rejectDecision(id: string): Promise<DecisionMemory> {
-    const decision = await prisma.decisionMemory.update({
-      where: { id },
-      data: {
-        status: "REJECTED"
-      }
-    });
+    try {
+      const decision = await prisma.decisionMemory.update({
+        where: { id },
+        data: {
+          status: "REJECTED"
+        }
+      });
 
-    return toDecisionMemory(decision);
+      return toDecisionMemory(decision);
+    } catch (error) {
+      if (isMissingDecisionError(error)) {
+        throw new HttpError(404, "Decision not found");
+      }
+
+      throw error;
+    }
   }
 
   async stats(): Promise<DecisionStats> {
