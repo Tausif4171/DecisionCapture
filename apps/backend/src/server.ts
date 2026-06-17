@@ -6,6 +6,12 @@ import { startDecisionWorker } from "./modules/queue/queue.js";
 const app = createApp();
 
 if (env.QUEUE_MODE === "bullmq" && env.QUEUE_WORKER_ENABLED) {
+  logger.info(
+    {
+      queueMode: env.QUEUE_MODE
+    },
+    "Starting DecisionCapture BullMQ worker"
+  );
   startDecisionWorker();
 }
 
