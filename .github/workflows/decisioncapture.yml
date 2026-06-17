@@ -23,12 +23,14 @@ jobs:
             --json number,title,body,author,url,mergedAt,files,commits,reviews,labels \
             > pr-context.json
 
+          gh pr diff "$PR_NUMBER" --repo "$REPOSITORY" > pr.diff
+
       - name: Send PR context to DecisionCapture
         env:
           DECISIONCAPTURE_API_URL: ${{ secrets.DECISIONCAPTURE_API_URL }}
           DECISIONCAPTURE_TOKEN: ${{ secrets.DECISIONCAPTURE_TOKEN }}
         run: |
-          jq '{
+          jq --rawfile diff pr.diff '{
             prNumber: .number,
             title: .title,
             description: (.body // ""),
@@ -42,11 +44,17 @@ jobs:
             reviewComments: [.reviews[].body],
             approvals: [.reviews[] | select(.state == "APPROVED") | .author.login],
             labels: [.labels[].name],
-            diffSummary: "Collected by GitHub Action after merge"
+            diffSummary: ($diff | split("\n") | map(select(
+              startswith("diff --git") or
+              startswith("@@") or
+              startswith("+") or
+              startswith("-")
+            )) | .[:220] | join("\n"))
           }' pr-context.json > payload.json
 
           curl -fsS -X POST "$DECISIONCAPTURE_API_URL/decisions/analyze" \
             -H "content-type: application/json" \
             -H "ngrok-skip-browser-warning: true" \
             -H "x-decisioncapture-token: $DECISIONCAPTURE_TOKEN" \
-            --data @payload.json
+            --data @payload.json \
+            > decisioncapture-response.json

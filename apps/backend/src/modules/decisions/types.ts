@@ -1,0 +1,15 @@
+export type DecisionSearchOptions = {
+  q?: string;
+  status?: "APPROVED" | "PENDING" | "REJECTED";
+  repository?: string;
+  category?: string;
+  sort?: "recent" | "confidence" | "oldest";
+  limit?: number;
+};
+
+export type DecisionApprovalUpdates = {
+  decision?: string;
+  reason?: string;
+  alternative?: string | null;
+  impact?: string;
+};
