@@ -9,36 +9,13 @@ import type {
 import type { Prisma } from "@prisma/client";
 import { env } from "../../config/env.js";
 import { prisma } from "../database/prisma.js";
+import type { DecisionMemoryRecord } from "../database/types.js";
 import { createAIProvider } from "../ai/index.js";
 import type { AIProvider } from "../ai/provider.js";
 import { resolveDecisionStatus, scoreDecisionContext } from "./scoring.js";
+import type { DecisionApprovalUpdates, DecisionSearchOptions } from "./types.js";
 
-type SearchOptions = {
-  q?: string;
-  status?: "APPROVED" | "PENDING" | "REJECTED";
-  repository?: string;
-  category?: string;
-  sort?: "recent" | "confidence" | "oldest";
-  limit?: number;
-};
-
-function toDecisionMemory(decision: {
-  id: string;
-  decision: string;
-  reason: string;
-  alternative: string | null;
-  impact: string;
-  author: string;
-  sourcePR: string;
-  repository: string;
-  filesChanged: string[];
-  confidence: number;
-  status: "APPROVED" | "PENDING" | "REJECTED";
-  category: string;
-  prRecordId: string | null;
-  createdAt: Date;
-  updatedAt: Date;
-}): DecisionMemory {
+function toDecisionMemory(decision: DecisionMemoryRecord): DecisionMemory {
   return {
     ...decision,
     createdAt: decision.createdAt.toISOString(),
@@ -136,7 +113,7 @@ export class DecisionService {
     };
   }
 
-  async listDecisions(options: SearchOptions): Promise<DecisionListResponse> {
+  async listDecisions(options: DecisionSearchOptions): Promise<DecisionListResponse> {
     const and: Prisma.DecisionMemoryWhereInput[] = [];
 
     if (options.status) {
@@ -195,12 +172,7 @@ export class DecisionService {
 
   async approveDecision(
     id: string,
-    updates: {
-      decision?: string;
-      reason?: string;
-      alternative?: string | null;
-      impact?: string;
-    }
+    updates: DecisionApprovalUpdates
   ): Promise<DecisionMemory> {
     const decision = await prisma.decisionMemory.update({
       where: { id },

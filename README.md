@@ -7,11 +7,13 @@ Code shows what changed. PR discussions explain why. DecisionCapture preserves t
 ## What It Does
 
 - Accepts merged PR context from GitHub webhooks or the included GitHub Action.
+- Enriches webhook-only ingestion with full PR files, commits, reviews, comments, approvals, and a bounded diff summary through the GitHub API.
 - Scores PRs before AI analysis so low-value noise is ignored.
 - Extracts decision, reason, alternative, impact, author, source PR, confidence, and category.
 - Stores approved and pending decision memories in PostgreSQL.
 - Processes capture work asynchronously with BullMQ and Redis.
 - Uses an `AIProvider` abstraction with Ollama plus a deterministic local fallback.
+- Posts and updates PR review comments from the backend when a decision needs review or is later approved/rejected.
 - Provides a SaaS-style dashboard for search, detail review, and pending approval.
 
 ## Architecture
@@ -27,10 +29,29 @@ flowchart LR
   AI --> Confidence["Confidence check"]
   Confidence -->|High| Approved["Approved decision"]
   Confidence -->|Low| Pending["Pending decision"]
+  Pending --> Comment["Backend PR review comment"]
   Approved --> DB["PostgreSQL via Prisma"]
   Pending --> DB
   DB --> UI["Next.js dashboard"]
 ```
+
+## Screenshots
+
+### Dashboard
+
+![DecisionCapture dashboard](docs/screenshots/dashboard.png)
+
+### Search And Review List
+
+![DecisionCapture decisions list](docs/screenshots/decisions.png)
+
+### Decision Detail
+
+![DecisionCapture decision detail](docs/screenshots/decision-detail.png)
+
+### Pending Queue
+
+![DecisionCapture pending review screen](docs/screenshots/pending.png)
 
 ## Repository Layout
 
@@ -106,6 +127,8 @@ npm run db:migrate
 | `QUEUE_MODE` | `inline` for local direct processing, `bullmq` for queued processing. |
 | `QUEUE_WORKER_ENABLED` | Starts the worker inside the backend process when true. |
 | `GITHUB_WEBHOOK_SECRET` | HMAC secret for GitHub webhook signature verification. |
+| `GITHUB_API_TOKEN` | GitHub PAT or GitHub App installation token used to enrich webhook payloads and post/update PR review comments. |
+| `APP_BASE_URL` | Public dashboard base URL used in PR review comment links. |
 | `INGEST_API_TOKEN` | Bearer token required by `/decisions/analyze` in Docker/production-style runs. |
 | `DASHBOARD_API_TOKEN` | Private server-to-server token used by the frontend proxy to read/update decisions. |
 | `DEMO_MODE_ENABLED` | Enables the sample demo endpoint when explicitly set to `true`. |
@@ -132,7 +155,7 @@ The MVP still works before that pull because the backend falls back to the heuri
 ## API
 
 - `POST /github/webhook` receives GitHub `pull_request.closed` events and only analyzes merged PRs.
-- `POST /decisions/analyze` analyzes full PR context from the GitHub Action or manual ingestion. Add `?wait=true` when the caller needs an immediate processed result.
+- `POST /decisions/analyze` accepts full PR context from the GitHub Action or manual ingestion and normally queues work asynchronously. Add `?wait=true` only for manual debugging when an immediate processed result is useful.
 - `GET /decisions` searches decisions by keyword, status, repository, category, and sort. Dashboard routes require `DASHBOARD_API_TOKEN` when configured.
 - `GET /decisions/stats` returns dashboard metrics and recent decisions.
 - `GET /decisions/:id` returns a decision detail record.
@@ -159,13 +182,17 @@ Configure repository secrets:
 
 - `DECISIONCAPTURE_API_URL`, for example `https://your-api.example.com`
 - `DECISIONCAPTURE_TOKEN`, matching `INGEST_API_TOKEN`
-- `DECISIONCAPTURE_APP_URL`, optional dashboard URL used in pending-decision PR comments
 
-The workflow collects PR metadata, a bounded diff summary, review data, labels, approvals, and changed files. If DecisionCapture returns a pending decision, the workflow comments on the PR with a dashboard review link.
+Configure backend environment variables for GitHub-owned enrichment and PR feedback:
 
-If you want to test this from a local machine, expose the backend with a tunnel and use that public URL as `DECISIONCAPTURE_API_URL`. Use the frontend URL as `DECISIONCAPTURE_APP_URL` if it is reachable by your team.
+- `GITHUB_API_TOKEN`, a GitHub PAT or GitHub App installation token with access to the repositories you want to analyze
+- `APP_BASE_URL`, the public dashboard URL used in PR review links
 
-For direct webhooks, set the GitHub webhook secret to match `GITHUB_WEBHOOK_SECRET`.
+The workflow collects PR metadata, a bounded diff summary, review data, labels, approvals, and changed files, then sends that payload to `POST /decisions/analyze` without waiting for inline processing. The BullMQ worker owns analysis, pending review comment creation, and later PR comment updates when a reviewer approves or rejects the decision from the dashboard.
+
+If you want to test this from a local machine, expose the backend with a tunnel and use that public URL as `DECISIONCAPTURE_API_URL`. Set `APP_BASE_URL` to a reachable dashboard URL if you want PR comments to contain clickable review links.
+
+For direct webhooks, set the GitHub webhook secret to match `GITHUB_WEBHOOK_SECRET`. With `GITHUB_API_TOKEN` configured, webhook-only ingestion now fetches the same rich PR context the MD calls for instead of relying on the limited webhook payload alone.
 
 ## Verification
 
@@ -182,6 +209,8 @@ curl http://localhost:4000/health
 ```
 
 Recommended end-to-end verification is a merged GitHub PR through `.github/workflows/decisioncapture.yml`. Keep the backend and tunnel running, set `DECISIONCAPTURE_API_URL` and `DECISIONCAPTURE_TOKEN` in GitHub Actions secrets, merge a PR, then confirm the dashboard shows that real PR.
+
+For webhook-only verification, also set `GITHUB_WEBHOOK_SECRET` and `GITHUB_API_TOKEN` on the backend, point a GitHub webhook at `POST /github/webhook`, merge a PR, and confirm the stored decision includes real files, commits, reviewers, approvals, and diff-derived context.
 
 The sample demo endpoint is intentionally disabled by default so production-like testing does not create fake records. To enable it locally, set both `DEMO_MODE_ENABLED=true` and `NEXT_PUBLIC_DEMO_MODE_ENABLED=true`, rebuild backend/frontend, then call `POST /demo/pr`.
 

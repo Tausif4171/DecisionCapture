@@ -1,13 +1,16 @@
 import { Queue, Worker, type ConnectionOptions } from "bullmq";
-import type { AnalyzeResponse, PRContext } from "@decisioncapture/shared";
 import { env } from "../../config/env.js";
 import { logger } from "../../config/logger.js";
-import { decisionService } from "../decisions/service.js";
+import { processDecisionContext } from "../decisions/processor.js";
+import {
+  type DecisionQueuePayload,
+  type DecisionQueueResult
+} from "./types.js";
 
 export const DECISION_QUEUE_NAME = "decision-analysis";
 
-let queue: Queue<PRContext, AnalyzeResponse> | undefined;
-let worker: Worker<PRContext, AnalyzeResponse> | undefined;
+let queue: Queue<DecisionQueuePayload, DecisionQueueResult> | undefined;
+let worker: Worker<DecisionQueuePayload, DecisionQueueResult> | undefined;
 
 function redisConnectionOptions(): ConnectionOptions {
   const url = new URL(env.REDIS_URL);
@@ -24,7 +27,7 @@ function redisConnectionOptions(): ConnectionOptions {
 
 export function getDecisionQueue() {
   if (!queue) {
-    queue = new Queue<PRContext, AnalyzeResponse>(DECISION_QUEUE_NAME, {
+    queue = new Queue<DecisionQueuePayload, DecisionQueueResult>(DECISION_QUEUE_NAME, {
       connection: redisConnectionOptions()
     });
   }
@@ -37,11 +40,11 @@ export function startDecisionWorker() {
     return worker;
   }
 
-  worker = new Worker<PRContext, AnalyzeResponse>(
+  worker = new Worker<DecisionQueuePayload, DecisionQueueResult>(
     DECISION_QUEUE_NAME,
     async (job) => {
       logger.info({ jobId: job.id, prNumber: job.data.prNumber }, "Processing PR analysis job");
-      return decisionService.analyzePrContext(job.data);
+      return processDecisionContext(job.data);
     },
     {
       connection: redisConnectionOptions(),

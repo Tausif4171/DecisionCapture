@@ -38,6 +38,7 @@ services:
       QUEUE_MODE: bullmq
       QUEUE_WORKER_ENABLED: "true"
       FRONTEND_ORIGIN: http://localhost:3088
+      APP_BASE_URL: ${APP_BASE_URL:-http://localhost:3088}
       AI_PROVIDER: ollama
       OLLAMA_BASE_URL: http://ollama:11434
       OLLAMA_MODEL: llama3.1
@@ -45,6 +46,7 @@ services:
       AUTO_APPROVE_CONFIDENCE: 0.78
       DECISION_SCORE_THRESHOLD: 35
       GITHUB_WEBHOOK_SECRET: ${GITHUB_WEBHOOK_SECRET:-}
+      GITHUB_API_TOKEN: ${GITHUB_API_TOKEN:-}
       INGEST_API_TOKEN: ${INGEST_API_TOKEN:?Set INGEST_API_TOKEN in .env or your shell}
       DASHBOARD_API_TOKEN: ${DASHBOARD_API_TOKEN:?Set DASHBOARD_API_TOKEN in .env or your shell}
       DEMO_MODE_ENABLED: ${DEMO_MODE_ENABLED:-false}

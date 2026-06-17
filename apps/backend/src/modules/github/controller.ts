@@ -2,7 +2,7 @@ import type { Request, Response } from "express";
 import { env } from "../../config/env.js";
 import { HttpError } from "../../middleware/error.js";
 import { analyzeOrQueue } from "../queue/service.js";
-import { mapWebhookToPRContext, shouldProcessPullRequestWebhook } from "./service.js";
+import { enrichWebhookToPRContext, shouldProcessPullRequestWebhook } from "./service.js";
 import { verifyGitHubSignature } from "./signature.js";
 import { githubPullRequestWebhookSchema } from "./validation.js";
 
@@ -36,7 +36,7 @@ export async function githubWebhook(request: Request, response: Response) {
     });
   }
 
-  const context = mapWebhookToPRContext(payload);
+  const context = await enrichWebhookToPRContext(payload);
   const result = await analyzeOrQueue(context);
   return response.status(result.status === "queued" ? 202 : 200).json(result);
 }

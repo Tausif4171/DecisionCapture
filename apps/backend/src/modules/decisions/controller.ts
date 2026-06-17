@@ -1,6 +1,7 @@
 import type { Request, Response } from "express";
 import { HttpError } from "../../middleware/error.js";
 import { analyzeOrQueue } from "../queue/service.js";
+import { processDecisionContext, syncDecisionNotificationFromStoredContext } from "./processor.js";
 import { decisionService } from "./service.js";
 import { approveDecisionSchema, decisionSearchSchema, prContextSchema } from "./validation.js";
 
@@ -17,7 +18,7 @@ function decisionId(request: Request) {
 export async function analyzeDecision(request: Request, response: Response) {
   const context = prContextSchema.parse(request.body);
   const shouldWait = request.query.wait === "true";
-  const result = shouldWait ? await decisionService.analyzePrContext(context) : await analyzeOrQueue(context);
+  const result = shouldWait ? await processDecisionContext(context) : await analyzeOrQueue(context);
   return response.status(result.status === "queued" ? 202 : 200).json(result);
 }
 
@@ -45,10 +46,12 @@ export async function getDecision(request: Request, response: Response) {
 export async function approveDecision(request: Request, response: Response) {
   const updates = approveDecisionSchema.parse(request.body);
   const decision = await decisionService.approveDecision(decisionId(request), updates);
+  await syncDecisionNotificationFromStoredContext(decision);
   return response.json(decision);
 }
 
 export async function rejectDecision(request: Request, response: Response) {
   const decision = await decisionService.rejectDecision(decisionId(request));
+  await syncDecisionNotificationFromStoredContext(decision);
   return response.json(decision);
 }

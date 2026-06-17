@@ -10,7 +10,7 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
-      pull-requests: write
+      pull-requests: read
     steps:
       - name: Collect PR context
         id: context
@@ -29,7 +29,6 @@ jobs:
         env:
           DECISIONCAPTURE_API_URL: ${{ secrets.DECISIONCAPTURE_API_URL }}
           DECISIONCAPTURE_TOKEN: ${{ secrets.DECISIONCAPTURE_TOKEN }}
-          DECISIONCAPTURE_APP_URL: ${{ secrets.DECISIONCAPTURE_APP_URL }}
         run: |
           jq --rawfile diff pr.diff '{
             prNumber: .number,
@@ -53,22 +52,9 @@ jobs:
             )) | .[:220] | join("\n"))
           }' pr-context.json > payload.json
 
-          curl -fsS -X POST "$DECISIONCAPTURE_API_URL/decisions/analyze?wait=true" \
+          curl -fsS -X POST "$DECISIONCAPTURE_API_URL/decisions/analyze" \
             -H "content-type: application/json" \
             -H "ngrok-skip-browser-warning: true" \
             -H "x-decisioncapture-token: $DECISIONCAPTURE_TOKEN" \
             --data @payload.json \
             > decisioncapture-response.json
-
-          status="$(jq -r '.decision.status // empty' decisioncapture-response.json)"
-          decision_id="$(jq -r '.decision.id // empty' decisioncapture-response.json)"
-          decision_title="$(jq -r '.decision.decision // empty' decisioncapture-response.json)"
-
-          if [ "$status" = "PENDING" ]; then
-            dashboard_url="${DECISIONCAPTURE_APP_URL:-$DECISIONCAPTURE_API_URL}"
-            gh pr comment "${{ github.event.pull_request.number }}" --repo "${{ github.repository }}" --body "DecisionCapture found a low-confidence decision that needs review.
-
-Decision: ${decision_title}
-
-Review: ${dashboard_url%/}/decisions/${decision_id}"
-          fi
