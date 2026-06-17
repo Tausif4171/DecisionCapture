@@ -7,12 +7,14 @@ Code shows what changed. PR discussions explain why. DecisionCapture preserves t
 ## What It Does
 
 - Accepts merged PR context from GitHub webhooks or the included GitHub Action.
+- Enriches webhook-only ingestion with full PR files, commits, reviews, comments, approvals, and a bounded diff summary through the GitHub API.
 - Scores PRs before AI analysis so low-value noise is ignored.
 - Extracts decision, reason, alternative, impact, author, source PR, confidence, and category.
 - Stores approved and pending decision memories in PostgreSQL.
 - Processes capture work asynchronously with BullMQ and Redis.
 - Uses an `AIProvider` abstraction with Ollama plus a deterministic local fallback.
-- Provides a SaaS-style dashboard for search, detail review, and pending approval.
+- Posts and updates PR review comments from the backend when a decision needs review or is later approved or rejected.
+- Provides a dashboard for search, detail review, and pending approval.
 
 ## Architecture
 
@@ -27,10 +29,29 @@ flowchart LR
   AI --> Confidence["Confidence check"]
   Confidence -->|High| Approved["Approved decision"]
   Confidence -->|Low| Pending["Pending decision"]
+  Pending --> Comment["Backend PR review comment"]
   Approved --> DB["PostgreSQL via Prisma"]
   Pending --> DB
   DB --> UI["Next.js dashboard"]
 ```
+
+## Screenshots
+
+### Dashboard
+
+![DecisionCapture dashboard](docs/screenshots/dashboard.png)
+
+### Search And Review List
+
+![DecisionCapture decisions list](docs/screenshots/decisions.png)
+
+### Decision Detail
+
+![DecisionCapture decision detail](docs/screenshots/decision-detail.png)
+
+### Pending Queue
+
+![DecisionCapture pending review screen](docs/screenshots/pending.png)
 
 ## Repository Layout
 
@@ -47,10 +68,11 @@ decisioncapture/
 
 ## Quick Start With Docker
 
-Docker is the easiest path. It does not require a local `.env` file because `docker-compose.yml` provides the service environment.
+Docker is the easiest path.
 
 ```bash
 cd /Users/tausif/Documents/projects/decisioncapture
+cp .env.example .env
 docker compose up -d
 ```
 
@@ -65,20 +87,20 @@ Run the local demo PR:
 curl -X POST http://localhost:4000/demo/pr
 ```
 
-The worker will process a fake merged PR and the dashboard will show an approved decision: “Use a Redis-backed queue for asynchronous PR analysis”.
-
 Stop the stack:
 
 ```bash
 docker compose down
 ```
 
-Reset all local demo/test data:
+Reset all local data:
 
 ```bash
 docker compose down -v
 docker compose up -d
 ```
+
+The Docker stack runs `npm run db:push` on startup so the MVP schema stays aligned with the current Prisma model.
 
 ## Local Development
 
@@ -87,21 +109,28 @@ cd /Users/tausif/Documents/projects/decisioncapture
 cp .env.example .env
 npm install
 npm run db:generate
+npm run db:push
 npm run dev
 ```
 
-For non-Docker development, provide PostgreSQL and Redis matching `.env.example`, or point `DATABASE_URL` and `REDIS_URL` at your own services. The Docker Compose database and Redis are intentionally private to the Compose network to avoid local port conflicts.
+For non-Docker development, provide PostgreSQL and Redis matching `.env.example`, or point `DATABASE_URL` and `REDIS_URL` at your own services.
 
 ## Environment Variables
 
 | Variable | Purpose |
 | --- | --- |
+| `POSTGRES_DB` | Local or Docker PostgreSQL database name. |
+| `POSTGRES_USER` | Local or Docker PostgreSQL username. |
+| `POSTGRES_PASSWORD` | Local or Docker PostgreSQL password. |
 | `DATABASE_URL` | PostgreSQL connection string for Prisma. |
 | `REDIS_URL` | Redis connection string for BullMQ. |
 | `QUEUE_MODE` | `inline` for local direct processing, `bullmq` for queued processing. |
 | `QUEUE_WORKER_ENABLED` | Starts the worker inside the backend process when true. |
-| `GITHUB_WEBHOOK_SECRET` | HMAC secret for GitHub webhook signature verification. |
-| `INGEST_API_TOKEN` | Optional token required by `/decisions/analyze`. |
+| `FRONTEND_ORIGIN` | Allowed frontend origin for CORS and dashboard links. |
+| `APP_BASE_URL` | Public dashboard base URL used in PR review comment links. |
+| `GITHUB_WEBHOOK_SECRET` | HMAC secret for GitHub webhook signature verification. Replace the sample value before real webhook use. |
+| `GITHUB_API_TOKEN` | GitHub PAT or GitHub App installation token used to enrich webhook payloads and post or update PR review comments. |
+| `INGEST_API_TOKEN` | Token required by `/decisions/analyze` when you set one. |
 | `AI_PROVIDER` | `ollama` or `heuristic`. |
 | `OLLAMA_BASE_URL` | Ollama API URL. In Docker this is `http://ollama:11434`. |
 | `OLLAMA_MODEL` | Ollama model name, default `llama3.1`. |
@@ -119,7 +148,7 @@ The MVP still works before that pull because the backend falls back to the heuri
 ## API
 
 - `POST /github/webhook` receives GitHub `pull_request.closed` events and only analyzes merged PRs.
-- `POST /decisions/analyze` analyzes full PR context from the GitHub Action or manual ingestion.
+- `POST /decisions/analyze` accepts full PR context from the GitHub Action or manual ingestion and normally queues work asynchronously. Add `?wait=true` only for manual debugging when you want the processed result immediately.
 - `GET /decisions` searches decisions by keyword, status, repository, category, and sort.
 - `GET /decisions/stats` returns dashboard metrics and recent decisions.
 - `GET /decisions/:id` returns a decision detail record.
@@ -147,13 +176,20 @@ Configure repository secrets:
 - `DECISIONCAPTURE_API_URL`, for example `https://your-api.example.com`
 - `DECISIONCAPTURE_TOKEN`, matching `INGEST_API_TOKEN`
 
-If you want to test this from a local machine, expose the backend with a tunnel and use that public URL as `DECISIONCAPTURE_API_URL`.
+Configure backend environment variables for GitHub-owned enrichment and PR feedback:
 
-For direct webhooks, set the GitHub webhook secret to match `GITHUB_WEBHOOK_SECRET`.
+- `GITHUB_API_TOKEN`, a GitHub PAT or GitHub App installation token with access to the repositories you want to analyze
+- `APP_BASE_URL`, the public dashboard URL used in PR review links
+
+The workflow collects PR metadata, a bounded diff summary, review data, labels, approvals, and changed files, then sends that payload to `POST /decisions/analyze` without waiting for inline processing. The BullMQ worker owns analysis, pending review comment creation, and later PR comment updates when a reviewer approves or rejects the decision from the dashboard.
+
+If you want to test this from a local machine, expose the backend with a tunnel and use that public URL as `DECISIONCAPTURE_API_URL`. Set `APP_BASE_URL` to a reachable dashboard URL if you want PR comments to contain clickable review links.
+
+For direct webhooks, set the GitHub webhook secret to match `GITHUB_WEBHOOK_SECRET`. With `GITHUB_API_TOKEN` configured, webhook-only ingestion fetches the same rich PR context the requirements call for instead of relying on the limited webhook payload alone.
 
 ## Verification
 
-Commands run successfully during this build:
+Recommended local verification:
 
 ```bash
 npm run typecheck
@@ -161,14 +197,15 @@ npm run lint
 npm run test
 npm run build
 docker compose config
-docker compose build backend frontend
 docker compose up -d
 curl http://localhost:4000/health
 curl -X POST http://localhost:4000/demo/pr
 curl http://localhost:4000/decisions
 ```
 
-The dashboard was also verified in the in-app browser at `http://localhost:3088`: stats rendered, the Redis queue decision appeared, search for `Redis` worked, and the decision detail page opened without console errors.
+Recommended end-to-end verification is a merged GitHub PR through `.github/workflows/decisioncapture.yml`. Keep the backend and tunnel running, set `DECISIONCAPTURE_API_URL` and `DECISIONCAPTURE_TOKEN` in GitHub Actions secrets, merge a PR, then confirm the dashboard shows that real PR.
+
+For webhook-only verification, also set `GITHUB_WEBHOOK_SECRET` and `GITHUB_API_TOKEN` on the backend, point a GitHub webhook at `POST /github/webhook`, merge a PR, and confirm the stored decision includes real files, commits, reviewers, approvals, and diff-derived context.
 
 ## Future Memory Store MCP Integration
 

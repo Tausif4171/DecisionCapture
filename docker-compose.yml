@@ -2,13 +2,13 @@ services:
   postgres:
     image: postgres:16-alpine
     environment:
-      POSTGRES_DB: decisioncapture
-      POSTGRES_USER: decision
-      POSTGRES_PASSWORD: decision
+      POSTGRES_DB: ${POSTGRES_DB:-decisioncapture}
+      POSTGRES_USER: ${POSTGRES_USER:-decision}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-decision}
     volumes:
       - postgres-data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U decision -d decisioncapture"]
+      test: ["CMD-SHELL", "pg_isready -U \"$${POSTGRES_USER}\" -d \"$${POSTGRES_DB}\""]
       interval: 5s
       timeout: 5s
       retries: 20
@@ -33,19 +33,21 @@ services:
     environment:
       NODE_ENV: production
       PORT: 4000
-      DATABASE_URL: postgresql://decision:decision@postgres:5432/decisioncapture?schema=public
+      DATABASE_URL: postgresql://${POSTGRES_USER:-decision}:${POSTGRES_PASSWORD:-decision}@postgres:5432/${POSTGRES_DB:-decisioncapture}?schema=public
       REDIS_URL: redis://redis:6379
       QUEUE_MODE: bullmq
       QUEUE_WORKER_ENABLED: "true"
       FRONTEND_ORIGIN: http://localhost:3088
+      APP_BASE_URL: ${APP_BASE_URL:-http://localhost:3088}
       AI_PROVIDER: ollama
       OLLAMA_BASE_URL: http://ollama:11434
       OLLAMA_MODEL: llama3.1
       USE_HEURISTIC_AI_FALLBACK: "true"
       AUTO_APPROVE_CONFIDENCE: 0.78
       DECISION_SCORE_THRESHOLD: 35
-      GITHUB_WEBHOOK_SECRET: ${GITHUB_WEBHOOK_SECRET:-change-me}
-      INGEST_API_TOKEN: ${INGEST_API_TOKEN:-local-demo-token}
+      GITHUB_WEBHOOK_SECRET: ${GITHUB_WEBHOOK_SECRET:-}
+      GITHUB_API_TOKEN: ${GITHUB_API_TOKEN:-}
+      INGEST_API_TOKEN: ${INGEST_API_TOKEN:-}
     ports:
       - "4000:4000"
     depends_on:
