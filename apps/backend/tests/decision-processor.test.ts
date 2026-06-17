@@ -112,6 +112,27 @@ describe("decision processing orchestration", () => {
     expect(result.status).toBe("ignored");
   });
 
+  it("keeps the decision processed when GitHub review comment sync fails", async () => {
+    const context = buildContext();
+    const decision = buildDecision();
+
+    mockDecisionService.analyzePrContext.mockResolvedValue({
+      status: "processed",
+      decision,
+      message: "Decision memory needs author review before approval"
+    });
+    mockGitHubService.syncDecisionReviewComment.mockRejectedValue(new Error("GitHub returned 404"));
+
+    const result = await processDecisionContext(context);
+
+    expect(result).toMatchObject({
+      status: "processed",
+      decision: {
+        id: "decision-88"
+      }
+    });
+  });
+
   it("reloads stored PR context when syncing comment state after approval", async () => {
     const context = buildContext();
     const decision = buildDecision({

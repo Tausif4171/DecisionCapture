@@ -16,13 +16,6 @@ export async function githubWebhook(request: Request, response: Response) {
     });
   }
 
-  const signature = request.header("x-hub-signature-256");
-  const rawBody = request.rawBody ?? JSON.stringify(request.body);
-
-  if (!verifyGitHubSignature(rawBody, signature, env.GITHUB_WEBHOOK_SECRET)) {
-    throw new HttpError(401, "Invalid GitHub webhook signature");
-  }
-
   const payload = githubPullRequestWebhookSchema.parse(request.body);
 
   if (!shouldProcessPullRequestWebhook(payload)) {
@@ -30,6 +23,17 @@ export async function githubWebhook(request: Request, response: Response) {
       status: "ignored",
       message: "Only merged pull_request.closed events are analyzed"
     });
+  }
+
+  const signature = request.header("x-hub-signature-256");
+  const rawBody = request.rawBody ?? JSON.stringify(request.body);
+
+  if (!env.GITHUB_WEBHOOK_SECRET) {
+    throw new HttpError(503, "GitHub webhook secret is not configured");
+  }
+
+  if (!verifyGitHubSignature(rawBody, signature, env.GITHUB_WEBHOOK_SECRET)) {
+    throw new HttpError(401, "Invalid GitHub webhook signature");
   }
 
   const context = await enrichWebhookToPRContext(payload);

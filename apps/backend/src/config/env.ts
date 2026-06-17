@@ -22,7 +22,7 @@ const envSchema = z.object({
   QUEUE_WORKER_ENABLED: booleanFromString,
   FRONTEND_ORIGIN: z.string().default("http://localhost:3000"),
   APP_BASE_URL: optionalNonEmptyString,
-  GITHUB_WEBHOOK_SECRET: z.string().min(1).default("change-me"),
+  GITHUB_WEBHOOK_SECRET: optionalNonEmptyString,
   GITHUB_API_TOKEN: optionalNonEmptyString,
   INGEST_API_TOKEN: optionalNonEmptyString,
   AI_PROVIDER: z.enum(["ollama", "heuristic"]).default("ollama"),
