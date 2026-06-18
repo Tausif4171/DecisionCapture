@@ -67,7 +67,10 @@ function PendingDecisionEditor({ decision }: { decision: DecisionMemory }) {
   }
 
   return (
-    <article className="rounded-md border border-neutral-200 bg-white p-4 shadow-sm">
+    <article
+      className="rounded-md border border-neutral-200 bg-white p-4 shadow-sm"
+      data-testid={`pending-decision-${decision.id}`}
+    >
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
         <div className="flex flex-wrap items-center gap-2">
           <StatusBadge status={decision.status} />
