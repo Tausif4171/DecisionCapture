@@ -6,6 +6,7 @@ const mockPrisma = vi.hoisted(() => ({
     upsert: vi.fn()
   },
   decisionMemory: {
+    findUnique: vi.fn(),
     findFirst: vi.fn(),
     create: vi.fn(),
     update: vi.fn()
@@ -172,6 +173,7 @@ describe("DecisionService", () => {
       extractDecision: vi.fn()
     });
 
+    mockPrisma.decisionMemory.findUnique.mockResolvedValue({ status: "PENDING" });
     mockPrisma.decisionMemory.update.mockResolvedValue(
       buildDecisionRecord({
         id: "decision-approve",
@@ -205,6 +207,7 @@ describe("DecisionService", () => {
       extractDecision: vi.fn()
     });
 
+    mockPrisma.decisionMemory.findUnique.mockResolvedValue({ status: "PENDING" });
     mockPrisma.decisionMemory.update.mockResolvedValue(
       buildDecisionRecord({
         id: "decision-draft",
@@ -237,6 +240,7 @@ describe("DecisionService", () => {
       extractDecision: vi.fn()
     });
 
+    mockPrisma.decisionMemory.findUnique.mockResolvedValue({ status: "PENDING" });
     mockPrisma.decisionMemory.update.mockResolvedValue(
       buildDecisionRecord({
         id: "decision-reject",
@@ -253,5 +257,38 @@ describe("DecisionService", () => {
       }
     });
     expect(result.status).toBe("REJECTED");
+  });
+
+  it("rejects review actions for decisions that are no longer pending", async () => {
+    const service = new DecisionService({
+      extractDecision: vi.fn()
+    });
+
+    mockPrisma.decisionMemory.findUnique.mockResolvedValue({ status: "APPROVED" });
+
+    await expect(
+      service.updateDecision("decision-approved", {
+        decision: "Refine approved decision"
+      })
+    ).rejects.toMatchObject({
+      statusCode: 409,
+      message: "Only pending decisions can be edited"
+    });
+
+    await expect(
+      service.approveDecision("decision-approved", {
+        decision: "Approve again"
+      })
+    ).rejects.toMatchObject({
+      statusCode: 409,
+      message: "Only pending decisions can be approved"
+    });
+
+    await expect(service.rejectDecision("decision-approved")).rejects.toMatchObject({
+      statusCode: 409,
+      message: "Only pending decisions can be rejected"
+    });
+
+    expect(mockPrisma.decisionMemory.update).not.toHaveBeenCalled();
   });
 });

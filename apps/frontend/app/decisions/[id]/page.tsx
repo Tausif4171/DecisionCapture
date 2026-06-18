@@ -39,6 +39,10 @@ export default function DecisionDetailPage() {
   const isPendingDecision = decision?.status === "PENDING";
   const isDirty = decision && formValue ? hasDecisionReviewChanges(decision, formValue) : false;
   const hasRequiredFields = formValue ? hasRequiredDecisionReviewFields(formValue) : false;
+  const readOnlyMessage =
+    decision?.status === "APPROVED"
+      ? "Approved decisions are locked so the final engineering memory stays auditable."
+      : "Rejected decisions stay read-only as review history.";
 
   const updateMutation = useMutation({
     mutationFn: () => updateDecision(params.id, formValue!),
@@ -134,57 +138,63 @@ export default function DecisionDetailPage() {
             )}
           </div>
           <div className="flex flex-wrap gap-2">
-            <button
-              type="button"
-              onClick={isEditing ? cancelEditing : startEditing}
-              className="inline-flex min-h-10 items-center gap-2 rounded-md border border-neutral-200 px-3 py-2 text-sm font-medium text-neutral-700 transition hover:bg-neutral-50"
-              title={isEditing ? "Cancel editing" : "Edit decision"}
-            >
-              {isEditing ? <X className="size-4" aria-hidden="true" /> : <Save className="size-4" aria-hidden="true" />}
-              {isEditing ? "Cancel" : "Edit"}
-            </button>
-            {isEditing ? (
+            {isPendingDecision ? (
+              <button
+                type="button"
+                onClick={isEditing ? cancelEditing : startEditing}
+                className="inline-flex min-h-10 items-center gap-2 rounded-md border border-neutral-200 px-3 py-2 text-sm font-medium text-neutral-700 transition hover:bg-neutral-50"
+                title={isEditing ? "Cancel editing" : "Edit decision"}
+              >
+                {isEditing ? <X className="size-4" aria-hidden="true" /> : <Save className="size-4" aria-hidden="true" />}
+                {isEditing ? "Cancel" : "Edit"}
+              </button>
+            ) : null}
+            {isEditing && isPendingDecision ? (
               <button
                 type="button"
                 onClick={() => updateMutation.mutate()}
                 disabled={!isDirty || !hasRequiredFields || isBusy}
                 className="inline-flex min-h-10 items-center gap-2 rounded-md border border-neutral-200 px-3 py-2 text-sm font-medium text-neutral-700 transition hover:bg-neutral-50 disabled:text-neutral-400"
-                title={isPendingDecision ? "Save draft without approving" : "Save decision changes"}
+                title="Save draft without approving"
               >
                 <Save className="size-4" aria-hidden="true" />
-                {isPendingDecision ? "Save draft" : "Save changes"}
+                Save draft
               </button>
             ) : null}
-            <button
-              type="button"
-              onClick={() => approveMutation.mutate()}
-              disabled={!hasRequiredFields || isBusy}
-              className="inline-flex min-h-10 items-center gap-2 rounded-md bg-emerald-600 px-3 py-2 text-sm font-semibold text-white transition hover:bg-emerald-700 disabled:bg-emerald-300"
-              title="Approve decision"
-            >
-              <Check className="size-4" aria-hidden="true" />
-              Approve
-            </button>
-            <button
-              type="button"
-              onClick={() => rejectMutation.mutate()}
-              disabled={isBusy}
-              className="inline-flex min-h-10 items-center gap-2 rounded-md border border-neutral-200 px-3 py-2 text-sm font-medium text-neutral-700 transition hover:bg-neutral-50 disabled:text-neutral-400"
-              title="Reject decision"
-            >
-              <X className="size-4" aria-hidden="true" />
-              Reject
-            </button>
+            {isPendingDecision ? (
+              <>
+                <button
+                  type="button"
+                  onClick={() => approveMutation.mutate()}
+                  disabled={!hasRequiredFields || isBusy}
+                  className="inline-flex min-h-10 items-center gap-2 rounded-md bg-emerald-600 px-3 py-2 text-sm font-semibold text-white transition hover:bg-emerald-700 disabled:bg-emerald-300"
+                  title="Approve decision"
+                >
+                  <Check className="size-4" aria-hidden="true" />
+                  Approve
+                </button>
+                <button
+                  type="button"
+                  onClick={() => rejectMutation.mutate()}
+                  disabled={isBusy}
+                  className="inline-flex min-h-10 items-center gap-2 rounded-md border border-neutral-200 px-3 py-2 text-sm font-medium text-neutral-700 transition hover:bg-neutral-50 disabled:text-neutral-400"
+                  title="Reject decision"
+                >
+                  <X className="size-4" aria-hidden="true" />
+                  Reject
+                </button>
+              </>
+            ) : null}
           </div>
         </div>
         {actionError instanceof Error ? (
           <p className="mt-3 text-sm text-red-600">{actionError.message}</p>
         ) : updateMutation.isSuccess ? (
           <p className="mt-3 text-sm text-neutral-500">
-            {isPendingDecision
-              ? "Draft saved. This decision remains pending until you approve or reject it."
-              : "Changes saved."}
+            Draft saved. This decision remains pending until you approve or reject it.
           </p>
+        ) : !isPendingDecision ? (
+          <p className="mt-3 text-sm text-neutral-500">{readOnlyMessage}</p>
         ) : null}
       </section>
 

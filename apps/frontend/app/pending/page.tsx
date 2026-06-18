@@ -23,6 +23,7 @@ function PendingDecisionEditor({ decision }: { decision: DecisionMemory }) {
     mutationFn: () => updateDecision(decision.id, draft),
     onSuccess: async (updatedDecision) => {
       setDraft(toDecisionReviewDraft(updatedDecision));
+      await queryClient.invalidateQueries({ queryKey: ["decision", decision.id] });
       await queryClient.invalidateQueries({ queryKey: ["decisions"] });
       await queryClient.invalidateQueries({ queryKey: ["stats"] });
     }
@@ -31,6 +32,7 @@ function PendingDecisionEditor({ decision }: { decision: DecisionMemory }) {
   const approveMutation = useMutation({
     mutationFn: () => approveDecision(decision.id, draft),
     onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ["decision", decision.id] });
       await queryClient.invalidateQueries({ queryKey: ["decisions"] });
       await queryClient.invalidateQueries({ queryKey: ["stats"] });
     }
@@ -39,6 +41,7 @@ function PendingDecisionEditor({ decision }: { decision: DecisionMemory }) {
   const rejectMutation = useMutation({
     mutationFn: () => rejectDecision(decision.id),
     onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ["decision", decision.id] });
       await queryClient.invalidateQueries({ queryKey: ["decisions"] });
       await queryClient.invalidateQueries({ queryKey: ["stats"] });
     }

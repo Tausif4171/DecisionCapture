@@ -175,7 +175,26 @@ export class DecisionService {
     return decision ? toDecisionMemory(decision) : null;
   }
 
+  private async requirePendingDecision(id: string, action: "edit" | "approve" | "reject") {
+    const actionLabel =
+      action === "edit" ? "edited" : action === "approve" ? "approved" : "rejected";
+    const decision = await prisma.decisionMemory.findUnique({
+      where: { id },
+      select: { status: true }
+    });
+
+    if (!decision) {
+      throw new HttpError(404, "Decision not found");
+    }
+
+    if (decision.status !== "PENDING") {
+      throw new HttpError(409, `Only pending decisions can be ${actionLabel}`);
+    }
+  }
+
   async updateDecision(id: string, updates: DecisionReviewUpdates): Promise<DecisionMemory> {
+    await this.requirePendingDecision(id, "edit");
+
     try {
       const decision = await prisma.decisionMemory.update({
         where: { id },
@@ -193,6 +212,8 @@ export class DecisionService {
   }
 
   async approveDecision(id: string, updates: DecisionReviewUpdates): Promise<DecisionMemory> {
+    await this.requirePendingDecision(id, "approve");
+
     try {
       const decision = await prisma.decisionMemory.update({
         where: { id },
@@ -213,6 +234,8 @@ export class DecisionService {
   }
 
   async rejectDecision(id: string): Promise<DecisionMemory> {
+    await this.requirePendingDecision(id, "reject");
+
     try {
       const decision = await prisma.decisionMemory.update({
         where: { id },
