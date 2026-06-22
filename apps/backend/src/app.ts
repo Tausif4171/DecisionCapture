@@ -5,6 +5,7 @@ import { pinoHttp } from "pino-http";
 import { env } from "./config/env.js";
 import { logger } from "./config/logger.js";
 import { errorHandler, notFoundHandler } from "./middleware/error.js";
+import { attachCurrentUser } from "./modules/auth/middleware.js";
 import { router } from "./routes.js";
 
 const allowedOrigins = env.FRONTEND_ORIGIN.split(",").map((origin) => origin.trim());
@@ -28,6 +29,7 @@ export function createApp() {
     })
   );
   app.use(pinoHttp({ logger }));
+  app.use(attachCurrentUser);
 
   app.use(router);
   app.use(notFoundHandler);

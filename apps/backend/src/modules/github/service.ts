@@ -85,8 +85,9 @@ function decisionUrl(decision: DecisionMemory) {
   return baseUrl ? `${baseUrl}/decisions/${decision.id}` : decision.id;
 }
 
-function buildDecisionReviewComment(decision: DecisionMemory) {
+function buildDecisionReviewComment(context: PRContext, decision: DecisionMemory) {
   const url = decisionUrl(decision);
+  const authorMention = context.author ? `@${context.author}` : "PR author";
 
   if (decision.status === "APPROVED") {
     return `${REVIEW_COMMENT_MARKER}
@@ -95,7 +96,7 @@ DecisionCapture review complete.
 
 Decision: ${decision.decision}
 Status: approved
-Record: ${url}`;
+${decision.approvedByLogin ? `Approved by: @${decision.approvedByLogin}\n` : ""}Record: ${url}`;
   }
 
   if (decision.status === "REJECTED") {
@@ -105,14 +106,17 @@ DecisionCapture review complete.
 
 Decision: ${decision.decision}
 Status: rejected
-Record: ${url}`;
+${decision.rejectedByLogin ? `Rejected by: @${decision.rejectedByLogin}\n` : ""}Record: ${url}`;
   }
 
   return `${REVIEW_COMMENT_MARKER}
 
-DecisionCapture found a low-confidence decision that needs review.
+DecisionCapture found a low-confidence ${decision.category} decision in this merged PR.
+
+${authorMention}, can you review the captured context and approve, edit, or reject it?
 
 Decision: ${decision.decision}
+Reason: ${decision.reason}
 Status: pending
 Review: ${url}`;
 }
@@ -211,12 +215,15 @@ export async function enrichWebhookToPRContext(payload: GitHubPullRequestWebhook
   const repository = parseRepository(context.repository);
   const path = `/repos/${repository.owner}/${repository.repo}/pulls/${context.prNumber}`;
 
-  const [pullRequest, files, commits, reviews, reviewComments, diff] = await Promise.all([
+  const [pullRequest, files, commits, reviews, reviewComments, conversationComments, diff] = await Promise.all([
     fetchGitHub<GitHubPullRequestDetails>(path),
     fetchGitHubPages<GitHubPullRequestFile>(`${path}/files`),
     fetchGitHubPages<GitHubPullRequestCommit>(`${path}/commits`),
     fetchGitHubPages<GitHubPullRequestReview>(`${path}/reviews`),
     fetchGitHubPages<GitHubIssueComment>(`${path}/comments`),
+    fetchGitHubPages<GitHubIssueComment>(
+      `/repos/${repository.owner}/${repository.repo}/issues/${context.prNumber}/comments`
+    ),
     fetchPullRequestDiff(repository, context.prNumber)
   ]);
 
@@ -236,7 +243,10 @@ export async function enrichWebhookToPRContext(payload: GitHubPullRequestWebhook
     ]),
     reviewComments: dedupe([
       ...reviews.map((review) => review.body),
-      ...reviewComments.map((comment) => comment.body)
+      ...reviewComments.map((comment) => comment.body),
+      ...conversationComments
+        .filter((comment) => !comment.body?.includes(REVIEW_COMMENT_MARKER))
+        .map((comment) => comment.body)
     ]),
     approvals: dedupe(
       reviews.filter((review) => review.state === "APPROVED").map((review) => review.user?.login)
@@ -264,7 +274,7 @@ export async function syncDecisionReviewComment({ context, decision }: DecisionR
     return;
   }
 
-  const body = buildDecisionReviewComment(decision);
+  const body = buildDecisionReviewComment(context, decision);
 
   if (existing) {
     await fetchGitHub(`/repos/${repository.owner}/${repository.repo}/issues/comments/${existing.id}`, {

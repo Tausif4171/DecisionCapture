@@ -1,5 +1,6 @@
 import type {
   AnalyzeResponse,
+  DecisionAuditEntry,
   DecisionListResponse,
   DecisionMemory,
   DecisionStatus,
@@ -13,14 +14,34 @@ import { prisma } from "../database/prisma.js";
 import type { DecisionMemoryRecord } from "../database/types.js";
 import { createAIProvider } from "../ai/index.js";
 import type { AIProvider } from "../ai/provider.js";
+import type { ReviewActor } from "../auth/types.js";
 import { resolveDecisionStatus, scoreDecisionContext } from "./scoring.js";
 import type { DecisionReviewUpdates, DecisionSearchOptions } from "./types.js";
+import { prContextSchema } from "./validation.js";
 
 function toDecisionMemory(decision: DecisionMemoryRecord): DecisionMemory {
   return {
     ...decision,
+    approvedAt: decision.approvedAt?.toISOString() ?? null,
+    rejectedAt: decision.rejectedAt?.toISOString() ?? null,
     createdAt: decision.createdAt.toISOString(),
     updatedAt: decision.updatedAt.toISOString()
+  };
+}
+
+function toAuditEntry(entry: {
+  id: string;
+  decisionId: string;
+  action: DecisionAuditEntry["action"];
+  actorLogin?: string | null;
+  createdAt: Date;
+}): DecisionAuditEntry {
+  return {
+    id: entry.id,
+    decisionId: entry.decisionId,
+    action: entry.action,
+    actorLogin: entry.actorLogin ?? null,
+    createdAt: entry.createdAt.toISOString()
   };
 }
 
@@ -30,6 +51,39 @@ function mergedAtDate(context: PRContext) {
 
 function isMissingDecisionError(error: unknown) {
   return error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2025";
+}
+
+function normalizeLogin(login: string | null | undefined) {
+  return login?.trim().toLowerCase() ?? "";
+}
+
+function actorLogin(actor: ReviewActor) {
+  return actor.user?.login ?? null;
+}
+
+function auditActorLogin(actor: ReviewActor) {
+  return actor.user?.login ?? (actor.authRequired ? null : "system");
+}
+
+function decisionSnapshot(decision: DecisionMemoryRecord): Prisma.InputJsonObject {
+  return {
+    decision: decision.decision,
+    reason: decision.reason,
+    alternative: decision.alternative,
+    impact: decision.impact,
+    author: decision.author,
+    sourcePR: decision.sourcePR,
+    repository: decision.repository,
+    filesChanged: decision.filesChanged,
+    confidence: decision.confidence,
+    status: decision.status,
+    category: decision.category,
+    approvedByLogin: decision.approvedByLogin,
+    approvedAt: decision.approvedAt?.toISOString() ?? null,
+    rejectedByLogin: decision.rejectedByLogin,
+    rejectedAt: decision.rejectedAt?.toISOString() ?? null,
+    lastEditedByLogin: decision.lastEditedByLogin
+  };
 }
 
 export class DecisionService {
@@ -92,20 +146,42 @@ export class DecisionService {
       filesChanged: context.filesChanged,
       confidence: extracted.confidence,
       status,
-      category: extracted.category
+      category: extracted.category,
+      approvedByUserId: null,
+      approvedByLogin: null,
+      approvedAt: null,
+      rejectedByUserId: null,
+      rejectedByLogin: null,
+      rejectedAt: null,
+      lastEditedByUserId: null,
+      lastEditedByLogin: null
     };
 
-    const decision = existingDecision
-      ? await prisma.decisionMemory.update({
-          where: { id: existingDecision.id },
-          data: decisionPayload
-        })
-      : await prisma.decisionMemory.create({
-          data: {
-            ...decisionPayload,
-            prRecordId: prRecord.id
-          }
-        });
+    const decision = await prisma.$transaction(async (tx) => {
+      const storedDecision = existingDecision
+        ? await tx.decisionMemory.update({
+            where: { id: existingDecision.id },
+            data: decisionPayload
+          })
+        : await tx.decisionMemory.create({
+            data: {
+              ...decisionPayload,
+              prRecordId: prRecord.id
+            }
+          });
+
+      await tx.decisionAuditLog.create({
+        data: {
+          decisionId: storedDecision.id,
+          action: existingDecision ? "EDITED" : "CREATED",
+          actorLogin: "system",
+          before: existingDecision ? decisionSnapshot(existingDecision) : Prisma.JsonNull,
+          after: decisionSnapshot(storedDecision)
+        }
+      });
+
+      return storedDecision;
+    });
 
     return {
       status: "processed",
@@ -175,12 +251,84 @@ export class DecisionService {
     return decision ? toDecisionMemory(decision) : null;
   }
 
-  private async requirePendingDecision(id: string, action: "edit" | "approve" | "reject") {
+  async listAuditLogs(id: string): Promise<DecisionAuditEntry[]> {
+    const [decision, auditLogs] = await Promise.all([
+      prisma.decisionMemory.findUnique({
+        where: { id },
+        select: { id: true }
+      }),
+      prisma.decisionAuditLog.findMany({
+        where: { decisionId: id },
+        orderBy: { createdAt: "desc" }
+      })
+    ]);
+
+    if (!decision) {
+      throw new HttpError(404, "Decision not found");
+    }
+
+    return auditLogs.map(toAuditEntry);
+  }
+
+  private contextFromDecision(decision: {
+    prRecord?: {
+      sourcePayload: Prisma.JsonValue | null;
+    } | null;
+  }) {
+    const parsed = prContextSchema.safeParse(decision.prRecord?.sourcePayload);
+    return parsed.success ? parsed.data : null;
+  }
+
+  private ensureCanReview(
+    decision: DecisionMemoryRecord & {
+      prRecord?: {
+        sourcePayload: Prisma.JsonValue | null;
+      } | null;
+    },
+    actor: ReviewActor
+  ) {
+    if (!actor.authRequired) {
+      return;
+    }
+
+    if (!actor.user) {
+      throw new HttpError(401, "GitHub sign-in is required to review decisions");
+    }
+
+    if (["ADMIN", "MAINTAINER", "REVIEWER"].includes(actor.user.role)) {
+      return;
+    }
+
+    const context = this.contextFromDecision(decision);
+    const allowedLogins = new Set(
+      [
+        decision.author,
+        context?.author,
+        ...(context?.reviewers ?? []),
+        ...(context?.approvals ?? [])
+      ]
+        .map(normalizeLogin)
+        .filter(Boolean)
+    );
+
+    if (!allowedLogins.has(normalizeLogin(actor.user.login))) {
+      throw new HttpError(
+        403,
+        "Only the PR author, reviewer, approver, or a DecisionCapture reviewer can review this decision"
+      );
+    }
+  }
+
+  private async requirePendingDecision(
+    id: string,
+    action: "edit" | "approve" | "reject",
+    actor: ReviewActor
+  ) {
     const actionLabel =
       action === "edit" ? "edited" : action === "approve" ? "approved" : "rejected";
     const decision = await prisma.decisionMemory.findUnique({
       where: { id },
-      select: { status: true }
+      include: { prRecord: true }
     });
 
     if (!decision) {
@@ -190,15 +338,42 @@ export class DecisionService {
     if (decision.status !== "PENDING") {
       throw new HttpError(409, `Only pending decisions can be ${actionLabel}`);
     }
+
+    this.ensureCanReview(decision, actor);
+    return decision;
   }
 
-  async updateDecision(id: string, updates: DecisionReviewUpdates): Promise<DecisionMemory> {
-    await this.requirePendingDecision(id, "edit");
+  async updateDecision(
+    id: string,
+    updates: DecisionReviewUpdates,
+    actor: ReviewActor = { authRequired: false }
+  ): Promise<DecisionMemory> {
+    const existingDecision = await this.requirePendingDecision(id, "edit", actor);
+    const login = actorLogin(actor);
 
     try {
-      const decision = await prisma.decisionMemory.update({
-        where: { id },
-        data: updates
+      const decision = await prisma.$transaction(async (tx) => {
+        const updatedDecision = await tx.decisionMemory.update({
+          where: { id },
+          data: {
+            ...updates,
+            lastEditedByUserId: actor.user?.id ?? null,
+            lastEditedByLogin: login
+          }
+        });
+
+        await tx.decisionAuditLog.create({
+          data: {
+            decisionId: id,
+            action: "EDITED",
+            actorUserId: actor.user?.id,
+            actorLogin: auditActorLogin(actor),
+            before: decisionSnapshot(existingDecision),
+            after: decisionSnapshot(updatedDecision)
+          }
+        });
+
+        return updatedDecision;
       });
 
       return toDecisionMemory(decision);
@@ -211,16 +386,45 @@ export class DecisionService {
     }
   }
 
-  async approveDecision(id: string, updates: DecisionReviewUpdates): Promise<DecisionMemory> {
-    await this.requirePendingDecision(id, "approve");
+  async approveDecision(
+    id: string,
+    updates: DecisionReviewUpdates,
+    actor: ReviewActor = { authRequired: false }
+  ): Promise<DecisionMemory> {
+    const existingDecision = await this.requirePendingDecision(id, "approve", actor);
+    const login = actorLogin(actor);
 
     try {
-      const decision = await prisma.decisionMemory.update({
-        where: { id },
-        data: {
-          ...updates,
-          status: "APPROVED"
-        }
+      const decision = await prisma.$transaction(async (tx) => {
+        const approvedAt = new Date();
+        const updatedDecision = await tx.decisionMemory.update({
+          where: { id },
+          data: {
+            ...updates,
+            status: "APPROVED",
+            approvedByUserId: actor.user?.id ?? null,
+            approvedByLogin: login,
+            approvedAt,
+            rejectedByUserId: null,
+            rejectedByLogin: null,
+            rejectedAt: null,
+            lastEditedByUserId: actor.user?.id ?? null,
+            lastEditedByLogin: login
+          }
+        });
+
+        await tx.decisionAuditLog.create({
+          data: {
+            decisionId: id,
+            action: "APPROVED",
+            actorUserId: actor.user?.id,
+            actorLogin: auditActorLogin(actor),
+            before: decisionSnapshot(existingDecision),
+            after: decisionSnapshot(updatedDecision)
+          }
+        });
+
+        return updatedDecision;
       });
 
       return toDecisionMemory(decision);
@@ -233,15 +437,38 @@ export class DecisionService {
     }
   }
 
-  async rejectDecision(id: string): Promise<DecisionMemory> {
-    await this.requirePendingDecision(id, "reject");
+  async rejectDecision(
+    id: string,
+    actor: ReviewActor = { authRequired: false }
+  ): Promise<DecisionMemory> {
+    const existingDecision = await this.requirePendingDecision(id, "reject", actor);
+    const login = actorLogin(actor);
 
     try {
-      const decision = await prisma.decisionMemory.update({
-        where: { id },
-        data: {
-          status: "REJECTED"
-        }
+      const decision = await prisma.$transaction(async (tx) => {
+        const rejectedAt = new Date();
+        const updatedDecision = await tx.decisionMemory.update({
+          where: { id },
+          data: {
+            status: "REJECTED",
+            rejectedByUserId: actor.user?.id ?? null,
+            rejectedByLogin: login,
+            rejectedAt
+          }
+        });
+
+        await tx.decisionAuditLog.create({
+          data: {
+            decisionId: id,
+            action: "REJECTED",
+            actorUserId: actor.user?.id,
+            actorLogin: auditActorLogin(actor),
+            before: decisionSnapshot(existingDecision),
+            after: decisionSnapshot(updatedDecision)
+          }
+        });
+
+        return updatedDecision;
       });
 
       return toDecisionMemory(decision);

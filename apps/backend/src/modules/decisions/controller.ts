@@ -1,5 +1,8 @@
 import type { Request, Response } from "express";
 import { HttpError } from "../../middleware/error.js";
+import type { AuthenticatedRequest } from "../auth/middleware.js";
+import { isAuthEnabled } from "../auth/service.js";
+import type { ReviewActor } from "../auth/types.js";
 import { analyzeOrQueue } from "../queue/service.js";
 import { processDecisionContext, syncDecisionNotificationFromStoredContext } from "./processor.js";
 import { decisionService } from "./service.js";
@@ -13,6 +16,13 @@ function decisionId(request: Request) {
   }
 
   return id;
+}
+
+function reviewActor(request: Request): ReviewActor {
+  return {
+    user: (request as AuthenticatedRequest).user,
+    authRequired: isAuthEnabled()
+  };
 }
 
 export async function analyzeDecision(request: Request, response: Response) {
@@ -43,22 +53,27 @@ export async function getDecision(request: Request, response: Response) {
   return response.json(decision);
 }
 
+export async function listDecisionAuditLogs(request: Request, response: Response) {
+  const auditLogs = await decisionService.listAuditLogs(decisionId(request));
+  return response.json(auditLogs);
+}
+
 export async function updateDecision(request: Request, response: Response) {
   const updates = decisionReviewSchema.parse(request.body);
-  const decision = await decisionService.updateDecision(decisionId(request), updates);
+  const decision = await decisionService.updateDecision(decisionId(request), updates, reviewActor(request));
   await syncDecisionNotificationFromStoredContext(decision);
   return response.json(decision);
 }
 
 export async function approveDecision(request: Request, response: Response) {
   const updates = decisionReviewSchema.parse(request.body);
-  const decision = await decisionService.approveDecision(decisionId(request), updates);
+  const decision = await decisionService.approveDecision(decisionId(request), updates, reviewActor(request));
   await syncDecisionNotificationFromStoredContext(decision);
   return response.json(decision);
 }
 
 export async function rejectDecision(request: Request, response: Response) {
-  const decision = await decisionService.rejectDecision(decisionId(request));
+  const decision = await decisionService.rejectDecision(decisionId(request), reviewActor(request));
   await syncDecisionNotificationFromStoredContext(decision);
   return response.json(decision);
 }

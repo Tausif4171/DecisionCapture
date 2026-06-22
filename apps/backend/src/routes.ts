@@ -1,4 +1,5 @@
 import { Router } from "express";
+import { authRouter } from "./modules/auth/routes.js";
 import { decisionsRouter } from "./modules/decisions/routes.js";
 import { demoRouter } from "./modules/demo/routes.js";
 import { githubRouter } from "./modules/github/routes.js";
@@ -12,6 +13,7 @@ router.get("/health", (_request, response) => {
   });
 });
 
+router.use("/auth", authRouter);
 router.use("/github", githubRouter);
 router.use("/decisions", decisionsRouter);
 router.use("/demo", demoRouter);

@@ -112,8 +112,22 @@ describe("GitHub service", () => {
         jsonResponse([
           {
             id: 1001,
-            body: "Please keep the review link stable",
+            body: "Please keep the inline review link stable",
             user: { login: "maya.dev" }
+          }
+        ])
+      )
+      .mockResolvedValueOnce(
+        jsonResponse([
+          {
+            id: 1002,
+            body: "Normal PR conversation context",
+            user: { login: "maya.dev" }
+          },
+          {
+            id: 1003,
+            body: "<!-- decisioncapture:review-comment -->\nDecisionCapture review text",
+            user: { login: "decisioncapture-bot" }
           }
         ])
       )
@@ -155,7 +169,8 @@ describe("GitHub service", () => {
     });
     expect(result.reviewComments).toEqual([
       "Backend-owned comments look good",
-      "Please keep the review link stable"
+      "Please keep the inline review link stable",
+      "Normal PR conversation context"
     ]);
     expect(result.diffSummary).toContain("diff --git");
   });
@@ -192,5 +207,31 @@ describe("GitHub service", () => {
     expect(vi.mocked(global.fetch).mock.calls[1]?.[1]).toMatchObject({
       method: "PATCH"
     });
+  });
+
+  it("tags the PR author when creating a pending review request", async () => {
+    vi.mocked(global.fetch)
+      .mockResolvedValueOnce(jsonResponse([]))
+      .mockResolvedValueOnce(jsonResponse({ id: 9002 }));
+
+    await syncDecisionReviewComment({
+      context: {
+        prNumber: 55,
+        title: "Use backend-owned PR review comments",
+        description: "",
+        author: "maya.dev",
+        url: "https://github.com/acme/platform/pull/55",
+        repository: "acme/platform",
+        filesChanged: []
+      },
+      decision: buildPendingDecision()
+    });
+
+    const request = vi.mocked(global.fetch).mock.calls[1]?.[1];
+    const body = JSON.parse(String(request?.body)) as { body: string };
+
+    expect(body.body).toContain("@maya.dev");
+    expect(body.body).toContain("approve, edit, or reject");
+    expect(body.body).toContain("low-confidence architecture decision");
   });
 });

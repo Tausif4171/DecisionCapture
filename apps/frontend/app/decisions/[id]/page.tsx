@@ -3,8 +3,8 @@
 import { useState } from "react";
 import { useParams } from "next/navigation";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Check, ExternalLink, GitBranch, Save, ShieldCheck, UserRound, X } from "lucide-react";
-import { approveDecision, getDecision, rejectDecision, updateDecision } from "../../../lib/api";
+import { Check, ExternalLink, GitBranch, History, Save, ShieldCheck, UserRound, X } from "lucide-react";
+import { approveDecision, getDecision, listDecisionAudit, rejectDecision, updateDecision } from "../../../lib/api";
 import {
   hasDecisionReviewChanges,
   hasRequiredDecisionReviewFields,
@@ -23,6 +23,19 @@ function Field({ label, value }: { label: string; value: string }) {
   );
 }
 
+function formatAuditAction(action: string) {
+  return action.toLowerCase().replace("_", " ");
+}
+
+function formatAuditDate(value: string) {
+  return new Intl.DateTimeFormat(undefined, {
+    month: "short",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit"
+  }).format(new Date(value));
+}
+
 export default function DecisionDetailPage() {
   const params = useParams<{ id: string }>();
   const queryClient = useQueryClient();
@@ -32,6 +45,12 @@ export default function DecisionDetailPage() {
   const decisionQuery = useQuery({
     queryKey: ["decision", params.id],
     queryFn: () => getDecision(params.id)
+  });
+
+  const auditQuery = useQuery({
+    queryKey: ["decision-audit", params.id],
+    queryFn: () => listDecisionAudit(params.id),
+    enabled: Boolean(decisionQuery.data)
   });
 
   const decision = decisionQuery.data;
@@ -50,6 +69,7 @@ export default function DecisionDetailPage() {
       setIsEditing(false);
       setDraft(null);
       await queryClient.invalidateQueries({ queryKey: ["decision", params.id] });
+      await queryClient.invalidateQueries({ queryKey: ["decision-audit", params.id] });
       await queryClient.invalidateQueries({ queryKey: ["decisions"] });
       await queryClient.invalidateQueries({ queryKey: ["stats"] });
     }
@@ -61,6 +81,7 @@ export default function DecisionDetailPage() {
       setIsEditing(false);
       setDraft(null);
       await queryClient.invalidateQueries({ queryKey: ["decision", params.id] });
+      await queryClient.invalidateQueries({ queryKey: ["decision-audit", params.id] });
       await queryClient.invalidateQueries({ queryKey: ["decisions"] });
       await queryClient.invalidateQueries({ queryKey: ["stats"] });
     }
@@ -70,6 +91,7 @@ export default function DecisionDetailPage() {
     mutationFn: () => rejectDecision(params.id),
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: ["decision", params.id] });
+      await queryClient.invalidateQueries({ queryKey: ["decision-audit", params.id] });
       await queryClient.invalidateQueries({ queryKey: ["decisions"] });
       await queryClient.invalidateQueries({ queryKey: ["stats"] });
     }
@@ -268,6 +290,40 @@ export default function DecisionDetailPage() {
                   {file}
                 </p>
               ))}
+            </div>
+          </div>
+          <div className="border-t border-neutral-100 pt-4">
+            <div className="mb-3 flex items-center gap-2 text-sm font-semibold text-neutral-950">
+              <History className="size-4 text-neutral-500" aria-hidden="true" />
+              Review
+            </div>
+            <div className="space-y-2 text-xs text-neutral-600">
+              {decision.approvedByLogin ? (
+                <p className="rounded-md bg-emerald-50 px-2 py-1 text-emerald-700">
+                  Approved by {decision.approvedByLogin}
+                </p>
+              ) : null}
+              {decision.rejectedByLogin ? (
+                <p className="rounded-md bg-red-50 px-2 py-1 text-red-700">
+                  Rejected by {decision.rejectedByLogin}
+                </p>
+              ) : null}
+              {decision.lastEditedByLogin ? (
+                <p className="rounded-md bg-neutral-50 px-2 py-1">Last edited by {decision.lastEditedByLogin}</p>
+              ) : null}
+              {auditQuery.data?.length ? (
+                <ol className="space-y-2">
+                  {auditQuery.data.map((entry) => (
+                    <li key={entry.id} className="rounded-md border border-neutral-100 px-2 py-1">
+                      <span className="font-medium text-neutral-800">{formatAuditAction(entry.action)}</span>
+                      <span> by {entry.actorLogin ?? "system"}</span>
+                      <span className="block text-neutral-500">{formatAuditDate(entry.createdAt)}</span>
+                    </li>
+                  ))}
+                </ol>
+              ) : (
+                <p className="text-neutral-500">No review activity yet.</p>
+              )}
             </div>
           </div>
         </aside>

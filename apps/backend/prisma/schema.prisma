@@ -13,6 +13,38 @@ enum DecisionStatus {
   REJECTED
 }
 
+enum UserRole {
+  ADMIN
+  MAINTAINER
+  REVIEWER
+  VIEWER
+}
+
+enum DecisionAuditAction {
+  CREATED
+  EDITED
+  APPROVED
+  REJECTED
+}
+
+model AppUser {
+  id                String              @id @default(cuid())
+  githubId          String              @unique
+  login             String              @unique
+  name              String?
+  avatarUrl         String?
+  role              UserRole            @default(VIEWER)
+  createdAt         DateTime            @default(now())
+  updatedAt         DateTime            @updatedAt
+  approvedDecisions DecisionMemory[]    @relation("ApprovedDecisionUser")
+  rejectedDecisions DecisionMemory[]    @relation("RejectedDecisionUser")
+  editedDecisions   DecisionMemory[]    @relation("EditedDecisionUser")
+  auditLogs         DecisionAuditLog[]
+
+  @@index([role])
+  @@map("app_users")
+}
+
 model PullRequestRecord {
   id            String           @id @default(cuid())
   prNumber      Int
@@ -46,12 +78,46 @@ model DecisionMemory {
   category    String            @default("architecture")
   prRecordId  String?
   prRecord    PullRequestRecord? @relation(fields: [prRecordId], references: [id], onDelete: SetNull)
+  approvedByUserId String?
+  approvedBy       AppUser?      @relation("ApprovedDecisionUser", fields: [approvedByUserId], references: [id], onDelete: SetNull)
+  approvedByLogin  String?
+  approvedAt       DateTime?
+  rejectedByUserId String?
+  rejectedBy       AppUser?      @relation("RejectedDecisionUser", fields: [rejectedByUserId], references: [id], onDelete: SetNull)
+  rejectedByLogin  String?
+  rejectedAt       DateTime?
+  lastEditedByUserId String?
+  lastEditedBy       AppUser?    @relation("EditedDecisionUser", fields: [lastEditedByUserId], references: [id], onDelete: SetNull)
+  lastEditedByLogin  String?
   createdAt   DateTime          @default(now())
   updatedAt   DateTime          @updatedAt
+  auditLogs   DecisionAuditLog[]
 
   @@index([status])
   @@index([repository])
   @@index([category])
   @@index([createdAt])
+  @@index([approvedByUserId])
+  @@index([rejectedByUserId])
+  @@index([lastEditedByUserId])
   @@map("decision_memories")
+}
+
+model DecisionAuditLog {
+  id         String              @id @default(cuid())
+  decisionId String
+  decision   DecisionMemory      @relation(fields: [decisionId], references: [id], onDelete: Cascade)
+  action     DecisionAuditAction
+  actorUserId String?
+  actor       AppUser?           @relation(fields: [actorUserId], references: [id], onDelete: SetNull)
+  actorLogin  String?
+  before      Json?
+  after       Json?
+  createdAt   DateTime           @default(now())
+
+  @@index([decisionId])
+  @@index([actorUserId])
+  @@index([action])
+  @@index([createdAt])
+  @@map("decision_audit_logs")
 }

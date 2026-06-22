@@ -2,6 +2,7 @@ import type { ExtractedDecision, PRContext } from "@decisioncapture/shared";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const mockPrisma = vi.hoisted(() => ({
+  $transaction: vi.fn(),
   pullRequestRecord: {
     upsert: vi.fn()
   },
@@ -10,6 +11,10 @@ const mockPrisma = vi.hoisted(() => ({
     findFirst: vi.fn(),
     create: vi.fn(),
     update: vi.fn()
+  },
+  decisionAuditLog: {
+    create: vi.fn(),
+    findMany: vi.fn()
   }
 }));
 
@@ -71,15 +76,34 @@ function buildDecisionRecord(overrides: Record<string, unknown> = {}) {
     status: "PENDING",
     category: "infrastructure",
     prRecordId: "pr-record-1",
+    approvedByUserId: null,
+    approvedByLogin: null,
+    approvedAt: null,
+    rejectedByUserId: null,
+    rejectedByLogin: null,
+    rejectedAt: null,
+    lastEditedByUserId: null,
+    lastEditedByLogin: null,
     createdAt: new Date("2026-06-16T06:30:00.000Z"),
     updatedAt: new Date("2026-06-16T06:30:00.000Z"),
     ...overrides
   };
 }
 
+function buildReviewableDecisionRecord(overrides: Record<string, unknown> = {}) {
+  return buildDecisionRecord({
+    prRecord: {
+      sourcePayload: buildContext()
+    },
+    ...overrides
+  });
+}
+
 describe("DecisionService", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mockPrisma.$transaction.mockImplementation(async (callback) => callback(mockPrisma));
+    mockPrisma.decisionAuditLog.create.mockResolvedValue({ id: "audit-1" });
   });
 
   it("creates a pending decision when no prior record exists", async () => {
@@ -173,7 +197,9 @@ describe("DecisionService", () => {
       extractDecision: vi.fn()
     });
 
-    mockPrisma.decisionMemory.findUnique.mockResolvedValue({ status: "PENDING" });
+    mockPrisma.decisionMemory.findUnique.mockResolvedValue(
+      buildReviewableDecisionRecord({ id: "decision-approve" })
+    );
     mockPrisma.decisionMemory.update.mockResolvedValue(
       buildDecisionRecord({
         id: "decision-approve",
@@ -192,13 +218,20 @@ describe("DecisionService", () => {
 
     expect(mockPrisma.decisionMemory.update).toHaveBeenCalledWith({
       where: { id: "decision-approve" },
-      data: {
+      data: expect.objectContaining({
         decision: "Use BullMQ for PR analysis",
         reason: "We need retries outside the request path.",
         impact: "Merged PR analysis can scale independently.",
-        status: "APPROVED"
-      }
+        status: "APPROVED",
+        approvedByLogin: null,
+        approvedAt: expect.any(Date)
+      })
     });
+    expect(mockPrisma.decisionAuditLog.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({ action: "APPROVED", actorLogin: "system" })
+      })
+    );
     expect(result.status).toBe("APPROVED");
   });
 
@@ -207,7 +240,9 @@ describe("DecisionService", () => {
       extractDecision: vi.fn()
     });
 
-    mockPrisma.decisionMemory.findUnique.mockResolvedValue({ status: "PENDING" });
+    mockPrisma.decisionMemory.findUnique.mockResolvedValue(
+      buildReviewableDecisionRecord({ id: "decision-draft" })
+    );
     mockPrisma.decisionMemory.update.mockResolvedValue(
       buildDecisionRecord({
         id: "decision-draft",
@@ -226,11 +261,12 @@ describe("DecisionService", () => {
 
     expect(mockPrisma.decisionMemory.update).toHaveBeenCalledWith({
       where: { id: "decision-draft" },
-      data: {
+      data: expect.objectContaining({
         decision: "Log BullMQ worker startup for async decision processing",
         reason: "Startup visibility helps verify that queue processing is active before merged PRs arrive.",
-        impact: "Reviewers can confirm pending decisions are backed by a running worker."
-      }
+        impact: "Reviewers can confirm pending decisions are backed by a running worker.",
+        lastEditedByLogin: null
+      })
     });
     expect(result.status).toBe("PENDING");
   });
@@ -240,7 +276,9 @@ describe("DecisionService", () => {
       extractDecision: vi.fn()
     });
 
-    mockPrisma.decisionMemory.findUnique.mockResolvedValue({ status: "PENDING" });
+    mockPrisma.decisionMemory.findUnique.mockResolvedValue(
+      buildReviewableDecisionRecord({ id: "decision-reject" })
+    );
     mockPrisma.decisionMemory.update.mockResolvedValue(
       buildDecisionRecord({
         id: "decision-reject",
@@ -252,11 +290,174 @@ describe("DecisionService", () => {
 
     expect(mockPrisma.decisionMemory.update).toHaveBeenCalledWith({
       where: { id: "decision-reject" },
-      data: {
-        status: "REJECTED"
-      }
+      data: expect.objectContaining({
+        status: "REJECTED",
+        rejectedByLogin: null,
+        rejectedAt: expect.any(Date)
+      })
     });
     expect(result.status).toBe("REJECTED");
+  });
+
+  it("records the authenticated PR author who approves a decision", async () => {
+    const service = new DecisionService({
+      extractDecision: vi.fn()
+    });
+    const actor = {
+      authRequired: true,
+      user: {
+        id: "user-maya",
+        githubId: "101",
+        login: "maya.dev",
+        name: "Maya",
+        avatarUrl: null,
+        role: "VIEWER" as const
+      }
+    };
+
+    mockPrisma.decisionMemory.findUnique.mockResolvedValue(
+      buildReviewableDecisionRecord({ id: "decision-author-approve" })
+    );
+    mockPrisma.decisionMemory.update.mockResolvedValue(
+      buildDecisionRecord({
+        id: "decision-author-approve",
+        status: "APPROVED",
+        approvedByUserId: actor.user.id,
+        approvedByLogin: actor.user.login,
+        approvedAt: new Date("2026-06-22T08:00:00.000Z"),
+        lastEditedByUserId: actor.user.id,
+        lastEditedByLogin: actor.user.login
+      })
+    );
+
+    const result = await service.approveDecision(
+      "decision-author-approve",
+      { decision: "Use BullMQ for PR analysis" },
+      actor
+    );
+
+    expect(mockPrisma.decisionMemory.update).toHaveBeenCalledWith({
+      where: { id: "decision-author-approve" },
+      data: expect.objectContaining({
+        approvedByUserId: "user-maya",
+        approvedByLogin: "maya.dev",
+        lastEditedByLogin: "maya.dev"
+      })
+    });
+    expect(mockPrisma.decisionAuditLog.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          action: "APPROVED",
+          actorUserId: "user-maya",
+          actorLogin: "maya.dev"
+        })
+      })
+    );
+    expect(result).toMatchObject({
+      status: "APPROVED",
+      approvedByLogin: "maya.dev"
+    });
+  });
+
+  it("denies an unrelated viewer when GitHub auth is required", async () => {
+    const service = new DecisionService({
+      extractDecision: vi.fn()
+    });
+
+    mockPrisma.decisionMemory.findUnique.mockResolvedValue(
+      buildReviewableDecisionRecord({ id: "decision-private-review" })
+    );
+
+    await expect(
+      service.updateDecision(
+        "decision-private-review",
+        { reason: "Unrelated edit" },
+        {
+          authRequired: true,
+          user: {
+            id: "user-outsider",
+            githubId: "202",
+            login: "outsider",
+            name: null,
+            avatarUrl: null,
+            role: "VIEWER"
+          }
+        }
+      )
+    ).rejects.toMatchObject({
+      statusCode: 403
+    });
+
+    expect(mockPrisma.$transaction).not.toHaveBeenCalled();
+  });
+
+  it("allows a configured reviewer to review any pending decision", async () => {
+    const service = new DecisionService({
+      extractDecision: vi.fn()
+    });
+
+    mockPrisma.decisionMemory.findUnique.mockResolvedValue(
+      buildReviewableDecisionRecord({ id: "decision-reviewer-edit" })
+    );
+    mockPrisma.decisionMemory.update.mockResolvedValue(
+      buildDecisionRecord({
+        id: "decision-reviewer-edit",
+        reason: "Reviewed by the platform team.",
+        lastEditedByUserId: "user-reviewer",
+        lastEditedByLogin: "platform-reviewer"
+      })
+    );
+
+    const result = await service.updateDecision(
+      "decision-reviewer-edit",
+      { reason: "Reviewed by the platform team." },
+      {
+        authRequired: true,
+        user: {
+          id: "user-reviewer",
+          githubId: "303",
+          login: "platform-reviewer",
+          name: null,
+          avatarUrl: null,
+          role: "REVIEWER"
+        }
+      }
+    );
+
+    expect(result.lastEditedByLogin).toBe("platform-reviewer");
+  });
+
+  it("returns the newest decision audit activity first", async () => {
+    const service = new DecisionService({
+      extractDecision: vi.fn()
+    });
+
+    mockPrisma.decisionMemory.findUnique.mockResolvedValue({ id: "decision-audit" });
+    mockPrisma.decisionAuditLog.findMany.mockResolvedValue([
+      {
+        id: "audit-2",
+        decisionId: "decision-audit",
+        action: "APPROVED",
+        actorLogin: "maya.dev",
+        createdAt: new Date("2026-06-22T08:10:00.000Z")
+      },
+      {
+        id: "audit-1",
+        decisionId: "decision-audit",
+        action: "EDITED",
+        actorLogin: "maya.dev",
+        createdAt: new Date("2026-06-22T08:00:00.000Z")
+      }
+    ]);
+
+    const result = await service.listAuditLogs("decision-audit");
+
+    expect(mockPrisma.decisionAuditLog.findMany).toHaveBeenCalledWith({
+      where: { decisionId: "decision-audit" },
+      orderBy: { createdAt: "desc" }
+    });
+    expect(result.map((entry) => entry.action)).toEqual(["APPROVED", "EDITED"]);
+    expect(result[0]?.createdAt).toBe("2026-06-22T08:10:00.000Z");
   });
 
   it("rejects review actions for decisions that are no longer pending", async () => {
@@ -264,7 +465,9 @@ describe("DecisionService", () => {
       extractDecision: vi.fn()
     });
 
-    mockPrisma.decisionMemory.findUnique.mockResolvedValue({ status: "APPROVED" });
+    mockPrisma.decisionMemory.findUnique.mockResolvedValue(
+      buildReviewableDecisionRecord({ status: "APPROVED" })
+    );
 
     await expect(
       service.updateDecision("decision-approved", {

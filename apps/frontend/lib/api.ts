@@ -1,5 +1,7 @@
 import type {
   AnalyzeResponse,
+  AuthStatus,
+  DecisionAuditEntry,
   DecisionListResponse,
   DecisionMemory,
   DecisionStats
@@ -22,6 +24,7 @@ class ApiError extends Error {
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const response = await fetch(`${API_URL}${path}`, {
     ...init,
+    credentials: "include",
     headers: {
       "content-type": "application/json",
       ...init?.headers
@@ -31,6 +34,10 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   if (!response.ok) {
     const body = (await response.json().catch(() => null)) as { message?: string } | null;
     throw new ApiError(body?.message ?? `Request failed with ${response.status}`, response.status);
+  }
+
+  if (response.status === 204) {
+    return undefined as T;
   }
 
   return response.json() as Promise<T>;
@@ -58,6 +65,24 @@ export function listDecisions(query: Query = {}) {
 
 export function getDecision(id: string) {
   return request<DecisionMemory>(`/decisions/${id}`);
+}
+
+export function listDecisionAudit(id: string) {
+  return request<DecisionAuditEntry[]>(`/decisions/${id}/audit`);
+}
+
+export function getAuthStatus() {
+  return request<AuthStatus>("/auth/me");
+}
+
+export function authLoginUrl(returnTo: string) {
+  return `${API_URL}/auth/github?returnTo=${encodeURIComponent(returnTo)}`;
+}
+
+export function logout() {
+  return request<void>("/auth/logout", {
+    method: "POST"
+  });
 }
 
 function toDecisionReviewBody(body: DecisionReviewDraft) {

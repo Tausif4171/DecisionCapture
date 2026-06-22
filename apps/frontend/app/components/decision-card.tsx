@@ -1,7 +1,38 @@
 import Link from "next/link";
 import type { DecisionMemory } from "@decisioncapture/shared";
-import { ArrowUpRight, GitBranch, UserRound } from "lucide-react";
+import { ArrowUpRight, CheckCircle2, GitBranch, PencilLine, UserRound, XCircle } from "lucide-react";
 import { StatusBadge } from "./status-badge";
+
+function ReviewBadge({ decision }: { decision: DecisionMemory }) {
+  if (decision.approvedByLogin) {
+    return (
+      <span className="inline-flex items-center gap-1 rounded-md bg-emerald-50 px-2 py-1 text-xs font-medium text-emerald-700">
+        <CheckCircle2 className="size-3.5" aria-hidden="true" />
+        Approved by {decision.approvedByLogin}
+      </span>
+    );
+  }
+
+  if (decision.rejectedByLogin) {
+    return (
+      <span className="inline-flex items-center gap-1 rounded-md bg-red-50 px-2 py-1 text-xs font-medium text-red-700">
+        <XCircle className="size-3.5" aria-hidden="true" />
+        Rejected by {decision.rejectedByLogin}
+      </span>
+    );
+  }
+
+  if (decision.lastEditedByLogin) {
+    return (
+      <span className="inline-flex items-center gap-1 rounded-md bg-neutral-100 px-2 py-1 text-xs font-medium text-neutral-600">
+        <PencilLine className="size-3.5" aria-hidden="true" />
+        Edited by {decision.lastEditedByLogin}
+      </span>
+    );
+  }
+
+  return null;
+}
 
 export function DecisionCard({ decision }: { decision: DecisionMemory }) {
   return (
@@ -14,6 +45,7 @@ export function DecisionCard({ decision }: { decision: DecisionMemory }) {
               {decision.category}
             </span>
             <span className="text-xs text-neutral-500">{Math.round(decision.confidence * 100)}% confidence</span>
+            <ReviewBadge decision={decision} />
           </div>
           <h3 className="text-base font-semibold text-neutral-950">{decision.decision}</h3>
           <p className="mt-2 line-clamp-2 text-sm leading-6 text-neutral-600">{decision.reason}</p>

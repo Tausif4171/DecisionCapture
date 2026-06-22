@@ -14,6 +14,8 @@ Code shows what changed. PR discussions explain why. DecisionCapture preserves t
 - Processes capture work asynchronously with BullMQ and Redis.
 - Uses an `AIProvider` abstraction with Ollama plus a deterministic local fallback.
 - Posts and updates PR review comments from the backend when a decision needs review or is later approved or rejected.
+- Tags the PR author on pending review comments and includes normal PR conversation comments in analysis context.
+- Supports GitHub OAuth, role-based review permissions, reviewer identity, and a persistent decision audit trail.
 - Provides a dashboard for search, detail review, and pending approval.
 
 ## Architecture
@@ -128,6 +130,14 @@ For non-Docker development, provide PostgreSQL and Redis matching `.env.example`
 | `QUEUE_WORKER_ENABLED` | Starts the worker inside the backend process when true. |
 | `FRONTEND_ORIGIN` | Allowed frontend origin for CORS and dashboard links. |
 | `APP_BASE_URL` | Public dashboard base URL used in PR review comment links. |
+| `AUTH_MODE` | `disabled` for local/demo access or `github` to require GitHub sign-in for review actions. |
+| `AUTH_SESSION_SECRET` | Secret used to sign dashboard sessions. Required and at least 32 characters when GitHub auth is enabled. |
+| `AUTH_ALLOWED_LOGINS` | Comma-separated GitHub logins allowed to sign in as `VIEWER`; role-assigned logins are allowed automatically. |
+| `AUTH_ADMIN_LOGINS` | Comma-separated GitHub logins that receive the `ADMIN` role. |
+| `AUTH_MAINTAINER_LOGINS` | Comma-separated GitHub logins that receive the `MAINTAINER` role. |
+| `AUTH_REVIEWER_LOGINS` | Comma-separated GitHub logins that receive the `REVIEWER` role. |
+| `GITHUB_CLIENT_ID` | GitHub OAuth App client ID for dashboard sign-in. |
+| `GITHUB_CLIENT_SECRET` | GitHub OAuth App client secret for dashboard sign-in. |
 | `GITHUB_WEBHOOK_SECRET` | HMAC secret for GitHub webhook signature verification. Replace the sample value before real webhook use. |
 | `GITHUB_API_TOKEN` | GitHub PAT or GitHub App installation token used to enrich webhook payloads and post or update PR review comments. |
 | `INGEST_API_TOKEN` | Token required by `/decisions/analyze` when you set one. |
@@ -152,8 +162,13 @@ The MVP still works before that pull because the backend falls back to the heuri
 - `GET /decisions` searches decisions by keyword, status, repository, category, and sort.
 - `GET /decisions/stats` returns dashboard metrics and recent decisions.
 - `GET /decisions/:id` returns a decision detail record.
+- `GET /decisions/:id/audit` returns the decision review audit trail.
+- `PATCH /decisions/:id` saves edits while leaving a decision pending.
 - `PATCH /decisions/:id/approve` approves a pending decision and optional edits.
 - `PATCH /decisions/:id/reject` rejects a pending decision.
+- `GET /auth/me` returns the current dashboard authentication state.
+- `GET /auth/github` starts GitHub OAuth login and `GET /auth/github/callback` completes it.
+- `POST /auth/logout` clears the dashboard session.
 - `POST /demo/pr` queues a sample merged PR for local demo testing.
 
 ## GitHub Integration
@@ -181,11 +196,50 @@ Configure backend environment variables for GitHub-owned enrichment and PR feedb
 - `GITHUB_API_TOKEN`, a GitHub PAT or GitHub App installation token with access to the repositories you want to analyze
 - `APP_BASE_URL`, the public dashboard URL used in PR review links
 
-The workflow collects PR metadata, a bounded diff summary, review data, labels, approvals, and changed files, then sends that payload to `POST /decisions/analyze` without waiting for inline processing. The BullMQ worker owns analysis, pending review comment creation, and later PR comment updates when a reviewer approves or rejects the decision from the dashboard.
+The workflow collects PR metadata, a bounded diff summary, formal reviews, normal PR conversation comments, labels, approvals, and changed files, then sends that payload to `POST /decisions/analyze` without waiting for inline processing. The BullMQ worker owns analysis, author-tagged pending review comment creation, and later PR comment updates when a reviewer approves or rejects the decision from the dashboard.
 
 If you want to test this from a local machine, expose the backend with a tunnel and use that public URL as `DECISIONCAPTURE_API_URL`. Set `APP_BASE_URL` to a reachable dashboard URL if you want PR comments to contain clickable review links.
 
 For direct webhooks, set the GitHub webhook secret to match `GITHUB_WEBHOOK_SECRET`. With `GITHUB_API_TOKEN` configured, webhook-only ingestion fetches the same rich PR context the requirements call for instead of relying on the limited webhook payload alone.
+
+## Dashboard Authentication And RBAC
+
+Local/demo mode remains open by default:
+
+```env
+AUTH_MODE=disabled
+```
+
+For a protected dashboard, create a GitHub OAuth App and set its callback URL to the public backend URL plus `/auth/github/callback`. For local testing, use:
+
+```text
+http://localhost:4000/auth/github/callback
+```
+
+Then configure:
+
+```env
+AUTH_MODE=github
+AUTH_SESSION_SECRET=replace-with-at-least-32-random-characters
+GITHUB_CLIENT_ID=your-oauth-client-id
+GITHUB_CLIENT_SECRET=your-oauth-client-secret
+AUTH_ALLOWED_LOGINS=
+AUTH_ADMIN_LOGINS=Tausif4171
+AUTH_MAINTAINER_LOGINS=
+AUTH_REVIEWER_LOGINS=
+```
+
+Generate a session secret with `openssl rand -hex 32`. Restart or rebuild the backend after changing these values.
+
+Review permissions are enforced by the backend:
+
+- Only GitHub logins present in `AUTH_ALLOWED_LOGINS` or one of the role lists can sign in.
+- `ADMIN`, `MAINTAINER`, and `REVIEWER` users can edit, approve, or reject any pending decision.
+- A `VIEWER` can review a decision only when their GitHub login matches the PR author, a requested/reported reviewer, or an approver captured from the PR.
+- Unauthenticated users receive `401` for dashboard data and review actions when GitHub auth is enabled. Ingestion remains protected separately by `INGEST_API_TOKEN`.
+- Unauthorized signed-in users receive `403`.
+
+Each edit, approval, and rejection is stored with the actor and before/after state. Decision cards and detail pages show reviewer identity, and the detail page shows the audit history. `GITHUB_API_TOKEN` remains the backend service credential for PR enrichment/comments; it is separate from the OAuth client credentials used for human dashboard sign-in.
 
 ## Verification
 

@@ -20,7 +20,7 @@ jobs:
           PR_NUMBER: ${{ github.event.pull_request.number }}
         run: |
           gh pr view "$PR_NUMBER" --repo "$REPOSITORY" \
-            --json number,title,body,author,url,mergedAt,files,commits,reviews,labels \
+            --json number,title,body,author,url,mergedAt,files,commits,reviews,comments,labels \
             > pr-context.json
 
           gh pr diff "$PR_NUMBER" --repo "$REPOSITORY" > pr.diff
@@ -41,7 +41,7 @@ jobs:
             filesChanged: [.files[].path? | select(type == "string" and length > 0)],
             commits: [.commits[].messageHeadline? | select(type == "string" and length > 0)],
             reviewers: [.reviews[].author.login? | select(type == "string" and length > 0)],
-            reviewComments: [.reviews[].body? | select(type == "string" and length > 0)],
+            reviewComments: (([.reviews[].body? | select(type == "string" and length > 0)] + [.comments[].body? | select(type == "string" and length > 0 and (contains("<!-- decisioncapture:review-comment -->") | not))]) | unique),
             approvals: [.reviews[] | select(.state == "APPROVED") | .author.login? | select(type == "string" and length > 0)],
             labels: [.labels[].name? | select(type == "string" and length > 0)],
             diffSummary: ($diff | split("\n") | map(select(

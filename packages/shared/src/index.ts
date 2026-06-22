@@ -1,4 +1,6 @@
 export type DecisionStatus = "APPROVED" | "PENDING" | "REJECTED";
+export type UserRole = "ADMIN" | "MAINTAINER" | "REVIEWER" | "VIEWER";
+export type DecisionAuditAction = "CREATED" | "EDITED" | "APPROVED" | "REJECTED";
 
 export interface PRContext {
   prNumber: number;
@@ -50,8 +52,36 @@ export interface DecisionMemory {
   status: DecisionStatus;
   category: string;
   prRecordId?: string | null;
+  approvedByLogin?: string | null;
+  approvedAt?: string | null;
+  rejectedByLogin?: string | null;
+  rejectedAt?: string | null;
+  lastEditedByLogin?: string | null;
   createdAt: string;
   updatedAt: string;
+}
+
+export interface AuthUser {
+  id: string;
+  githubId: string;
+  login: string;
+  name?: string | null;
+  avatarUrl?: string | null;
+  role: UserRole;
+}
+
+export interface AuthStatus {
+  authMode: "disabled" | "github";
+  authenticated: boolean;
+  user?: AuthUser;
+}
+
+export interface DecisionAuditEntry {
+  id: string;
+  decisionId: string;
+  action: DecisionAuditAction;
+  actorLogin?: string | null;
+  createdAt: string;
 }
 
 export interface PRRecord {
