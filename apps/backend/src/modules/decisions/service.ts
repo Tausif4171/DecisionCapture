@@ -14,7 +14,7 @@ import { prisma } from "../database/prisma.js";
 import type { DecisionMemoryRecord } from "../database/types.js";
 import { createAIProvider } from "../ai/index.js";
 import type { AIProvider } from "../ai/provider.js";
-import type { ReviewActor } from "../auth/types.js";
+import { privilegedRoles, type ReviewActor } from "../auth/types.js";
 import { resolveDecisionStatus, scoreDecisionContext } from "./scoring.js";
 import type { DecisionReviewUpdates, DecisionSearchOptions } from "./types.js";
 import { prContextSchema } from "./validation.js";
@@ -295,7 +295,7 @@ export class DecisionService {
       throw new HttpError(401, "GitHub sign-in is required to review decisions");
     }
 
-    if (["ADMIN", "MAINTAINER", "REVIEWER"].includes(actor.user.role)) {
+    if (privilegedRoles.includes(actor.user.role)) {
       return;
     }
 
