@@ -1,6 +1,7 @@
 import type { DecisionMemory, PRContext } from "@decisioncapture/shared";
 import { env } from "../../config/env.js";
 import { logger } from "../../config/logger.js";
+import { getGitHubApiToken, hasGitHubApiCredentials } from "./auth.js";
 import type {
   DecisionReviewCommentInput,
   GitHubIssueComment,
@@ -80,6 +81,15 @@ function splitCommitHeadline(message: string) {
   return message.split("\n")[0]?.trim() ?? message.trim();
 }
 
+function isAutomatedComment(comment: GitHubIssueComment) {
+  const login = comment.user?.login?.toLowerCase() ?? "";
+  return (
+    comment.body?.includes(REVIEW_COMMENT_MARKER) ||
+    comment.user?.type === "Bot" ||
+    login.endsWith("[bot]")
+  );
+}
+
 function decisionUrl(decision: DecisionMemory) {
   const baseUrl = dashboardBaseUrl();
   return baseUrl ? `${baseUrl}/decisions/${decision.id}` : decision.id;
@@ -127,15 +137,17 @@ function appendPagination(path: string, page: number) {
 }
 
 async function fetchGitHub<T>(path: string, init?: RequestInit, accept = GITHUB_API_ACCEPT) {
-  if (!env.GITHUB_API_TOKEN) {
-    throw new Error("GITHUB_API_TOKEN is not configured");
+  const token = await getGitHubApiToken();
+
+  if (!token) {
+    throw new Error("GitHub API credentials are not configured");
   }
 
   const response = await fetch(`${GITHUB_API_BASE_URL}${path}`, {
     ...init,
     headers: {
       accept,
-      authorization: `Bearer ${env.GITHUB_API_TOKEN}`,
+      authorization: `Bearer ${token}`,
       "content-type": "application/json",
       "user-agent": "DecisionCapture",
       ...(init?.headers ?? {})
@@ -204,10 +216,10 @@ export function mapWebhookToPRContext(payload: GitHubPullRequestWebhook): PRCont
 export async function enrichWebhookToPRContext(payload: GitHubPullRequestWebhook): Promise<PRContext> {
   const context = mapWebhookToPRContext(payload);
 
-  if (!env.GITHUB_API_TOKEN) {
+  if (!hasGitHubApiCredentials()) {
     logger.warn(
       { repository: context.repository, prNumber: context.prNumber },
-      "GITHUB_API_TOKEN is not configured; processing webhook with partial PR context"
+      "GitHub API credentials are not configured; processing webhook with partial PR context"
     );
     return context;
   }
@@ -245,7 +257,7 @@ export async function enrichWebhookToPRContext(payload: GitHubPullRequestWebhook
       ...reviews.map((review) => review.body),
       ...reviewComments.map((comment) => comment.body),
       ...conversationComments
-        .filter((comment) => !comment.body?.includes(REVIEW_COMMENT_MARKER))
+        .filter((comment) => !isAutomatedComment(comment))
         .map((comment) => comment.body)
     ]),
     approvals: dedupe(
@@ -257,10 +269,10 @@ export async function enrichWebhookToPRContext(payload: GitHubPullRequestWebhook
 }
 
 export async function syncDecisionReviewComment({ context, decision }: DecisionReviewCommentInput) {
-  if (!env.GITHUB_API_TOKEN) {
+  if (!hasGitHubApiCredentials()) {
     logger.warn(
       { decisionId: decision.id, repository: context.repository, prNumber: context.prNumber },
-      "Skipping PR review comment sync because GITHUB_API_TOKEN is not configured"
+      "Skipping PR review comment sync because GitHub API credentials are not configured"
     );
     return;
   }

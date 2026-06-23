@@ -40,3 +40,7 @@ export const decisionReviewSchema = z.object({
   alternative: z.string().optional().nullable(),
   impact: z.string().min(1).optional()
 });
+
+export const decisionReopenSchema = z.object({
+  reason: z.string().trim().min(10).max(500)
+});

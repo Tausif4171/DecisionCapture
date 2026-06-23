@@ -25,6 +25,13 @@ enum DecisionAuditAction {
   EDITED
   APPROVED
   REJECTED
+  REOPENED
+}
+
+enum DecisionExtractionMethod {
+  UNKNOWN
+  OLLAMA
+  STRUCTURED_FALLBACK
 }
 
 model AppUser {
@@ -76,6 +83,7 @@ model DecisionMemory {
   confidence  Float
   status      DecisionStatus    @default(PENDING)
   category    String            @default("architecture")
+  extractionMethod DecisionExtractionMethod @default(UNKNOWN)
   prRecordId  String?
   prRecord    PullRequestRecord? @relation(fields: [prRecordId], references: [id], onDelete: SetNull)
   approvedByUserId String?
@@ -111,6 +119,7 @@ model DecisionAuditLog {
   actorUserId String?
   actor       AppUser?           @relation(fields: [actorUserId], references: [id], onDelete: SetNull)
   actorLogin  String?
+  note        String?
   before      Json?
   after       Json?
   createdAt   DateTime           @default(now())

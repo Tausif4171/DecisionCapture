@@ -12,8 +12,8 @@ Code shows what changed. PR discussions explain why. DecisionCapture preserves t
 - Extracts decision, reason, alternative, impact, author, source PR, confidence, and category.
 - Stores approved and pending decision memories in PostgreSQL.
 - Processes capture work asynchronously with BullMQ and Redis.
-- Uses an `AIProvider` abstraction with Ollama plus a deterministic local fallback.
-- Posts and updates PR review comments from the backend when a decision needs review or is later approved or rejected.
+- Uses an `AIProvider` abstraction with Ollama plus a conservative structured-PR fallback that never invents canned decisions.
+- Posts and updates PR review comments from the backend when a decision needs review or is later approved, rejected, or reopened.
 - Tags the PR author on pending review comments and includes normal PR conversation comments in analysis context.
 - Supports GitHub OAuth, role-based review permissions, reviewer identity, and a persistent decision audit trail.
 - Provides a dashboard for search, detail review, and pending approval.
@@ -27,10 +27,10 @@ flowchart LR
   API --> Score["Decision score"]
   Score -->|Low| Ignore["Ignore noise"]
   Score -->|High| Queue["BullMQ queue"]
-  Queue --> AI["AIProvider: Ollama or fallback"]
+  Queue --> AI["AIProvider: Ollama or structured fallback"]
   AI --> Confidence["Confidence check"]
-  Confidence -->|High| Approved["Approved decision"]
-  Confidence -->|Low| Pending["Pending decision"]
+  Confidence -->|High Ollama confidence| Approved["Approved decision"]
+  Confidence -->|Low or fallback| Pending["Pending decision"]
   Pending --> Comment["Backend PR review comment"]
   Approved --> DB["PostgreSQL via Prisma"]
   Pending --> DB
@@ -76,6 +76,7 @@ Docker is the easiest path.
 cd /Users/tausif/Documents/projects/decisioncapture
 cp .env.example .env
 docker compose up -d
+docker compose exec ollama ollama pull llama3.1
 ```
 
 Open:
@@ -140,11 +141,14 @@ For non-Docker development, provide PostgreSQL and Redis matching `.env.example`
 | `GITHUB_CLIENT_SECRET` | GitHub OAuth App client secret for dashboard sign-in. |
 | `GITHUB_WEBHOOK_SECRET` | HMAC secret for GitHub webhook signature verification. Replace the sample value before real webhook use. |
 | `GITHUB_API_TOKEN` | GitHub PAT or GitHub App installation token used to enrich webhook payloads and post or update PR review comments. |
+| `GITHUB_APP_ID` | Preferred GitHub App ID for short-lived bot authentication. Configure with installation ID and private key. |
+| `GITHUB_APP_INSTALLATION_ID` | Installation ID for the DecisionCapture GitHub App. |
+| `GITHUB_APP_PRIVATE_KEY` | GitHub App PEM private key. In `.env`, encode line breaks as `\n`. |
 | `INGEST_API_TOKEN` | Token required by `/decisions/analyze` when you set one. |
 | `AI_PROVIDER` | `ollama` or `heuristic`. |
 | `OLLAMA_BASE_URL` | Ollama API URL. In Docker this is `http://ollama:11434`. |
 | `OLLAMA_MODEL` | Ollama model name, default `llama3.1`. |
-| `USE_HEURISTIC_AI_FALLBACK` | Falls back to deterministic extraction if Ollama is unavailable. |
+| `USE_HEURISTIC_AI_FALLBACK` | Parses explicit Decision/Reason/Alternative/Impact PR sections if Ollama is unavailable. Fallback records always require review. |
 | `NEXT_PUBLIC_API_URL` | Browser-facing backend URL for the frontend. |
 
 To use a real Ollama model in Docker:
@@ -153,7 +157,7 @@ To use a real Ollama model in Docker:
 docker compose exec ollama ollama pull llama3.1
 ```
 
-The MVP still works before that pull because the backend falls back to the heuristic provider.
+Pulling the model is required for real AI extraction. Without it, the backend safely creates a pending draft only from explicit PR sections and honest missing-context placeholders; it never auto-approves fallback output.
 
 ## API
 
@@ -166,6 +170,7 @@ The MVP still works before that pull because the backend falls back to the heuri
 - `PATCH /decisions/:id` saves edits while leaving a decision pending.
 - `PATCH /decisions/:id/approve` approves a pending decision and optional edits.
 - `PATCH /decisions/:id/reject` rejects a pending decision.
+- `PATCH /decisions/:id/reopen` reopens an approved or rejected decision with a required audit reason. With GitHub auth enabled, only admins and maintainers may use it.
 - `GET /auth/me` returns the current dashboard authentication state.
 - `GET /auth/github` starts GitHub OAuth login and `GET /auth/github/callback` completes it.
 - `POST /auth/logout` clears the dashboard session.
@@ -193,8 +198,11 @@ Configure repository secrets:
 
 Configure backend environment variables for GitHub-owned enrichment and PR feedback:
 
-- `GITHUB_API_TOKEN`, a GitHub PAT or GitHub App installation token with access to the repositories you want to analyze
+- Preferred: `GITHUB_APP_ID`, `GITHUB_APP_INSTALLATION_ID`, and `GITHUB_APP_PRIVATE_KEY`. DecisionCapture creates short-lived installation tokens and comments appear under the GitHub App bot identity.
+- MVP fallback: `GITHUB_API_TOKEN`, a PAT with access to the repositories you want to analyze. Comments appear as the PAT owner.
 - `APP_BASE_URL`, the public dashboard URL used in PR review links
+
+For the GitHub App, grant repository metadata read access and pull requests read/write access, then install it on the repositories DecisionCapture should analyze. Keep OAuth App credentials for human dashboard sign-in separate from GitHub App credentials for backend automation.
 
 The workflow collects PR metadata, a bounded diff summary, formal reviews, normal PR conversation comments, labels, approvals, and changed files, then sends that payload to `POST /decisions/analyze` without waiting for inline processing. The BullMQ worker owns analysis, author-tagged pending review comment creation, and later PR comment updates when a reviewer approves or rejects the decision from the dashboard.
 
@@ -235,11 +243,12 @@ Review permissions are enforced by the backend:
 
 - Only GitHub logins present in `AUTH_ALLOWED_LOGINS` or one of the role lists can sign in.
 - `ADMIN`, `MAINTAINER`, and `REVIEWER` users can edit, approve, or reject any pending decision.
+- Only `ADMIN` and `MAINTAINER` users can reopen an approved or rejected decision; reopening requires a reason and returns the record to pending review.
 - A `VIEWER` can review a decision only when their GitHub login matches the PR author, a requested/reported reviewer, or an approver captured from the PR.
 - Unauthenticated users receive `401` for dashboard data and review actions when GitHub auth is enabled. Ingestion remains protected separately by `INGEST_API_TOKEN`.
 - Unauthorized signed-in users receive `403`.
 
-Each edit, approval, and rejection is stored with the actor and before/after state. Decision cards and detail pages show reviewer identity, and the detail page shows the audit history. `GITHUB_API_TOKEN` remains the backend service credential for PR enrichment/comments; it is separate from the OAuth client credentials used for human dashboard sign-in.
+Each edit, approval, rejection, and reopen is stored with the actor and before/after state. Decision cards show one status plus muted reviewer attribution, while the detail page shows the complete audit history. GitHub API/App credentials remain backend service credentials for PR enrichment/comments; they are separate from OAuth client credentials used for human dashboard sign-in.
 
 ## Verification
 
@@ -250,12 +259,15 @@ npm run typecheck
 npm run lint
 npm run test
 npm run build
+npm run test:e2e
 docker compose config
 docker compose up -d
 curl http://localhost:4000/health
 curl -X POST http://localhost:4000/demo/pr
 curl http://localhost:4000/decisions
 ```
+
+The Playwright command starts an isolated Docker stack on ports `3098` and `4010`, uses an ephemeral PostgreSQL database, and removes the stack and data after the run. It does not add synthetic PRs to your normal dashboard database. Set `E2E_USE_EXISTING_STACK=true` only when intentionally testing an already-running environment.
 
 Recommended end-to-end verification is a merged GitHub PR through `.github/workflows/decisioncapture.yml`. Keep the backend and tunnel running, set `DECISIONCAPTURE_API_URL` and `DECISIONCAPTURE_TOKEN` in GitHub Actions secrets, merge a PR, then confirm the dashboard shows that real PR.
 

@@ -57,6 +57,7 @@ function buildExtractedDecision(overrides: Partial<ExtractedDecision> = {}): Ext
     source: "PR #123",
     confidence: 0.75,
     category: "infrastructure",
+    extractionMethod: "OLLAMA",
     ...overrides
   };
 }
@@ -75,6 +76,7 @@ function buildDecisionRecord(overrides: Record<string, unknown> = {}) {
     confidence: 0.75,
     status: "PENDING",
     category: "infrastructure",
+    extractionMethod: "OLLAMA",
     prRecordId: "pr-record-1",
     approvedByUserId: null,
     approvedByLogin: null,
@@ -190,6 +192,39 @@ describe("DecisionService", () => {
         status: "APPROVED"
       }
     });
+  });
+
+  it("keeps structured fallback extraction pending even above the approval threshold", async () => {
+    const aiProvider = {
+      extractDecision: vi.fn().mockResolvedValue(
+        buildExtractedDecision({
+          confidence: 0.99,
+          extractionMethod: "STRUCTURED_FALLBACK"
+        })
+      )
+    };
+    const service = new DecisionService(aiProvider);
+
+    mockPrisma.pullRequestRecord.upsert.mockResolvedValue({ id: "pr-record-fallback" });
+    mockPrisma.decisionMemory.findFirst.mockResolvedValue(null);
+    mockPrisma.decisionMemory.create.mockResolvedValue(
+      buildDecisionRecord({
+        id: "decision-fallback",
+        status: "PENDING",
+        extractionMethod: "STRUCTURED_FALLBACK"
+      })
+    );
+
+    await service.analyzePrContext(buildContext());
+
+    expect(mockPrisma.decisionMemory.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          status: "PENDING",
+          extractionMethod: "STRUCTURED_FALLBACK"
+        })
+      })
+    );
   });
 
   it("approves a pending decision with edits", async () => {
@@ -491,6 +526,85 @@ describe("DecisionService", () => {
       statusCode: 409,
       message: "Only pending decisions can be rejected"
     });
+
+    expect(mockPrisma.decisionMemory.update).not.toHaveBeenCalled();
+  });
+
+  it("lets a maintainer reopen a completed review with an audited reason", async () => {
+    const service = new DecisionService({ extractDecision: vi.fn() });
+    const actor = {
+      authRequired: true,
+      user: {
+        id: "user-maintainer",
+        githubId: "404",
+        login: "platform-maintainer",
+        name: null,
+        avatarUrl: null,
+        role: "MAINTAINER" as const
+      }
+    };
+    const approvedDecision = buildDecisionRecord({
+      id: "decision-reopen",
+      status: "APPROVED",
+      approvedByUserId: "user-reviewer",
+      approvedByLogin: "platform-reviewer",
+      approvedAt: new Date("2026-06-22T08:00:00.000Z")
+    });
+
+    mockPrisma.decisionMemory.findUnique.mockResolvedValue(approvedDecision);
+    mockPrisma.decisionMemory.update.mockResolvedValue(
+      buildDecisionRecord({ id: "decision-reopen", status: "PENDING" })
+    );
+
+    const result = await service.reopenDecision(
+      "decision-reopen",
+      { reason: "The architecture changed after the original review." },
+      actor
+    );
+
+    expect(mockPrisma.decisionMemory.update).toHaveBeenCalledWith({
+      where: { id: "decision-reopen" },
+      data: expect.objectContaining({
+        status: "PENDING",
+        approvedByLogin: null,
+        rejectedByLogin: null
+      })
+    });
+    expect(mockPrisma.decisionAuditLog.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          action: "REOPENED",
+          actorLogin: "platform-maintainer",
+          note: "The architecture changed after the original review."
+        })
+      })
+    );
+    expect(result.status).toBe("PENDING");
+  });
+
+  it("does not let a reviewer reopen a completed review", async () => {
+    const service = new DecisionService({ extractDecision: vi.fn() });
+    mockPrisma.decisionMemory.findUnique.mockResolvedValue(
+      buildDecisionRecord({ id: "decision-no-reopen", status: "REJECTED" })
+    );
+
+    await expect(
+      service.reopenDecision(
+        "decision-no-reopen",
+        { reason: "Request another review after new evidence." },
+        {
+          authRequired: true,
+          user: {
+            id: "user-reviewer",
+            githubId: "505",
+            login: "platform-reviewer",
+            name: null,
+            avatarUrl: null,
+            role: "REVIEWER"
+          }
+        }
+      )
+    ).rejects.toMatchObject({ statusCode: 403 });
 
     expect(mockPrisma.decisionMemory.update).not.toHaveBeenCalled();
   });

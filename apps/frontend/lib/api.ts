@@ -114,6 +114,13 @@ export function rejectDecision(id: string) {
   });
 }
 
+export function reopenDecision(id: string, reason: string) {
+  return request<DecisionMemory>(`/decisions/${id}/reopen`, {
+    method: "PATCH",
+    body: JSON.stringify({ reason })
+  });
+}
+
 export function createDemoPr() {
   return request<AnalyzeResponse>("/demo/pr", {
     method: "POST"

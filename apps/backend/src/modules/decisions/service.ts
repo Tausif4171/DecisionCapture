@@ -14,9 +14,9 @@ import { prisma } from "../database/prisma.js";
 import type { DecisionMemoryRecord } from "../database/types.js";
 import { createAIProvider } from "../ai/index.js";
 import type { AIProvider } from "../ai/provider.js";
-import { privilegedRoles, type ReviewActor } from "../auth/types.js";
+import { privilegedRoles, reopenRoles, type ReviewActor } from "../auth/types.js";
 import { resolveDecisionStatus, scoreDecisionContext } from "./scoring.js";
-import type { DecisionReviewUpdates, DecisionSearchOptions } from "./types.js";
+import type { DecisionReopenInput, DecisionReviewUpdates, DecisionSearchOptions } from "./types.js";
 import { prContextSchema } from "./validation.js";
 
 function toDecisionMemory(decision: DecisionMemoryRecord): DecisionMemory {
@@ -34,6 +34,7 @@ function toAuditEntry(entry: {
   decisionId: string;
   action: DecisionAuditEntry["action"];
   actorLogin?: string | null;
+  note?: string | null;
   createdAt: Date;
 }): DecisionAuditEntry {
   return {
@@ -41,6 +42,7 @@ function toAuditEntry(entry: {
     decisionId: entry.decisionId,
     action: entry.action,
     actorLogin: entry.actorLogin ?? null,
+    note: entry.note ?? null,
     createdAt: entry.createdAt.toISOString()
   };
 }
@@ -78,6 +80,7 @@ function decisionSnapshot(decision: DecisionMemoryRecord): Prisma.InputJsonObjec
     confidence: decision.confidence,
     status: decision.status,
     category: decision.category,
+    extractionMethod: decision.extractionMethod,
     approvedByLogin: decision.approvedByLogin,
     approvedAt: decision.approvedAt?.toISOString() ?? null,
     rejectedByLogin: decision.rejectedByLogin,
@@ -128,7 +131,11 @@ export class DecisionService {
     });
 
     const extracted = await this.aiProvider.extractDecision(context, score);
-    const status = resolveDecisionStatus(extracted.confidence, env.AUTO_APPROVE_CONFIDENCE) as DecisionStatus;
+    const status = (
+      extracted.extractionMethod === "STRUCTURED_FALLBACK"
+        ? "PENDING"
+        : resolveDecisionStatus(extracted.confidence, env.AUTO_APPROVE_CONFIDENCE)
+    ) as DecisionStatus;
 
     const existingDecision = await prisma.decisionMemory.findFirst({
       where: { prRecordId: prRecord.id },
@@ -147,6 +154,7 @@ export class DecisionService {
       confidence: extracted.confidence,
       status,
       category: extracted.category,
+      extractionMethod: extracted.extractionMethod,
       approvedByUserId: null,
       approvedByLogin: null,
       approvedAt: null,
@@ -343,6 +351,20 @@ export class DecisionService {
     return decision;
   }
 
+  private ensureCanReopen(actor: ReviewActor) {
+    if (!actor.authRequired) {
+      return;
+    }
+
+    if (!actor.user) {
+      throw new HttpError(401, "GitHub sign-in is required to reopen decisions");
+    }
+
+    if (!reopenRoles.includes(actor.user.role)) {
+      throw new HttpError(403, "Only an admin or maintainer can reopen a completed review");
+    }
+  }
+
   async updateDecision(
     id: string,
     updates: DecisionReviewUpdates,
@@ -469,6 +491,63 @@ export class DecisionService {
         });
 
         return updatedDecision;
+      });
+
+      return toDecisionMemory(decision);
+    } catch (error) {
+      if (isMissingDecisionError(error)) {
+        throw new HttpError(404, "Decision not found");
+      }
+
+      throw error;
+    }
+  }
+
+  async reopenDecision(
+    id: string,
+    input: DecisionReopenInput,
+    actor: ReviewActor = { authRequired: false }
+  ): Promise<DecisionMemory> {
+    const existingDecision = await prisma.decisionMemory.findUnique({ where: { id } });
+
+    if (!existingDecision) {
+      throw new HttpError(404, "Decision not found");
+    }
+
+    if (existingDecision.status === "PENDING") {
+      throw new HttpError(409, "This decision is already pending review");
+    }
+
+    this.ensureCanReopen(actor);
+
+    try {
+      const decision = await prisma.$transaction(async (tx) => {
+        const reopenedDecision = await tx.decisionMemory.update({
+          where: { id },
+          data: {
+            status: "PENDING",
+            approvedByUserId: null,
+            approvedByLogin: null,
+            approvedAt: null,
+            rejectedByUserId: null,
+            rejectedByLogin: null,
+            rejectedAt: null
+          }
+        });
+
+        await tx.decisionAuditLog.create({
+          data: {
+            decisionId: id,
+            action: "REOPENED",
+            actorUserId: actor.user?.id,
+            actorLogin: auditActorLogin(actor),
+            note: input.reason,
+            before: decisionSnapshot(existingDecision),
+            after: decisionSnapshot(reopenedDecision)
+          }
+        });
+
+        return reopenedDecision;
       });
 
       return toDecisionMemory(decision);

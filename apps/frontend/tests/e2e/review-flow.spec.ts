@@ -2,7 +2,7 @@ import { expect, test } from "@playwright/test";
 import { readFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 
-const API_URL = process.env.E2E_API_URL ?? "http://localhost:4000";
+const API_URL = process.env.E2E_API_URL ?? "http://localhost:4010";
 const ROOT_ENV_PATH = fileURLToPath(new URL("../../../../.env", import.meta.url));
 const API_READY_TIMEOUT_MS = 45_000;
 const API_RETRY_DELAY_MS = 1_000;
@@ -70,11 +70,14 @@ async function seedPendingDecision() {
   const token =
     process.env.INGEST_API_TOKEN ??
     process.env.DECISIONCAPTURE_TOKEN ??
-    (await readRootEnvValue("INGEST_API_TOKEN"));
+    (process.env.E2E_USE_EXISTING_STACK === "true"
+      ? await readRootEnvValue("INGEST_API_TOKEN")
+      : "decisioncapture-e2e-token");
 
   await waitForApi();
 
   const prNumber = 900000 + Math.floor(Date.now() % 100000);
+  const expectedDecision = "Log worker startup when DecisionCapture runs in BullMQ mode.";
   const request = await fetchWithRetry(`${API_URL}/decisions/analyze?wait=true`, {
     method: "POST",
     headers: {
@@ -109,7 +112,12 @@ async function seedPendingDecision() {
   };
   const decision = body.decision;
 
-  if (body.status !== "processed" || decision?.status !== "PENDING" || !decision?.id) {
+  if (
+    body.status !== "processed" ||
+    decision?.status !== "PENDING" ||
+    !decision?.id ||
+    decision.decision !== expectedDecision
+  ) {
     throw new Error(`Expected a pending decision, got ${JSON.stringify(body)}`);
   }
 
@@ -141,4 +149,12 @@ test("pending review can be saved as draft and approved separately", async ({ pa
   await expect(page.getByRole("button", { name: "Approve" })).toHaveCount(0);
   await expect(page.getByRole("button", { name: "Reject" })).toHaveCount(0);
   await expect(page.getByRole("heading", { name: editedDecision })).toBeVisible();
+
+  await page.getByRole("button", { name: "Reopen review" }).click();
+  await page.getByLabel("Reason").fill("New evidence requires another decision review.");
+  await page.getByRole("button", { name: "Reopen", exact: true }).click();
+
+  await expect(page.getByText("pending", { exact: true })).toBeVisible();
+  await expect(page.getByText("Review reopened by DecisionCapture")).toBeVisible();
+  await expect(page.getByText("New evidence requires another decision review.")).toBeVisible();
 });

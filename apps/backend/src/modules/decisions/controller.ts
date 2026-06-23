@@ -6,7 +6,12 @@ import type { ReviewActor } from "../auth/types.js";
 import { analyzeOrQueue } from "../queue/service.js";
 import { processDecisionContext, syncDecisionNotificationFromStoredContext } from "./processor.js";
 import { decisionService } from "./service.js";
-import { decisionReviewSchema, decisionSearchSchema, prContextSchema } from "./validation.js";
+import {
+  decisionReopenSchema,
+  decisionReviewSchema,
+  decisionSearchSchema,
+  prContextSchema
+} from "./validation.js";
 
 function decisionId(request: Request) {
   const id = request.params.id;
@@ -74,6 +79,13 @@ export async function approveDecision(request: Request, response: Response) {
 
 export async function rejectDecision(request: Request, response: Response) {
   const decision = await decisionService.rejectDecision(decisionId(request), reviewActor(request));
+  await syncDecisionNotificationFromStoredContext(decision);
+  return response.json(decision);
+}
+
+export async function reopenDecision(request: Request, response: Response) {
+  const input = decisionReopenSchema.parse(request.body);
+  const decision = await decisionService.reopenDecision(decisionId(request), input, reviewActor(request));
   await syncDecisionNotificationFromStoredContext(decision);
   return response.json(decision);
 }

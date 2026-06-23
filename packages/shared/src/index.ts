@@ -1,6 +1,7 @@
 export type DecisionStatus = "APPROVED" | "PENDING" | "REJECTED";
 export type UserRole = "ADMIN" | "MAINTAINER" | "REVIEWER" | "VIEWER";
-export type DecisionAuditAction = "CREATED" | "EDITED" | "APPROVED" | "REJECTED";
+export type DecisionAuditAction = "CREATED" | "EDITED" | "APPROVED" | "REJECTED" | "REOPENED";
+export type DecisionExtractionMethod = "OLLAMA" | "STRUCTURED_FALLBACK" | "UNKNOWN";
 
 export interface PRContext {
   prNumber: number;
@@ -36,6 +37,7 @@ export interface ExtractedDecision {
   source: string;
   confidence: number;
   category: string;
+  extractionMethod: Exclude<DecisionExtractionMethod, "UNKNOWN">;
 }
 
 export interface DecisionMemory {
@@ -51,6 +53,7 @@ export interface DecisionMemory {
   confidence: number;
   status: DecisionStatus;
   category: string;
+  extractionMethod: DecisionExtractionMethod;
   prRecordId?: string | null;
   approvedByLogin?: string | null;
   approvedAt?: string | null;
@@ -81,6 +84,7 @@ export interface DecisionAuditEntry {
   decisionId: string;
   action: DecisionAuditAction;
   actorLogin?: string | null;
+  note?: string | null;
   createdAt: string;
 }
 

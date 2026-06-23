@@ -9,8 +9,6 @@ const extractedDecisionSchema = z.object({
   reason: z.string().min(1),
   alternative: z.string().optional(),
   impact: z.string().min(1),
-  author: z.string().min(1),
-  source: z.string().min(1),
   confidence: z.number().min(0).max(1),
   category: z.string().min(1).default("architecture")
 });
@@ -36,8 +34,6 @@ JSON shape:
   "reason": "why this decision was made",
   "alternative": "main alternative considered",
   "impact": "engineering impact",
-  "author": "${context.author}",
-  "source": "PR #${context.prNumber}",
   "confidence": 0.0,
   "category": "database|api|architecture|dependencies|security|performance|infrastructure|collaboration"
 }
@@ -77,9 +73,14 @@ export class OllamaAIProvider implements AIProvider {
       const payload = (await response.json()) as { response?: string };
       const parsed = extractedDecisionSchema.parse(extractJson(payload.response ?? ""));
 
-      return parsed;
+      return {
+        ...parsed,
+        author: context.author,
+        source: `PR #${context.prNumber}`,
+        extractionMethod: "OLLAMA"
+      };
     } catch (error) {
-      logger.warn({ error }, "Ollama extraction failed");
+      logger.warn({ err: error }, "Ollama extraction failed; using structured PR fallback");
 
       if (this.fallback && env.USE_HEURISTIC_AI_FALLBACK) {
         return this.fallback.extractDecision(context, score);
