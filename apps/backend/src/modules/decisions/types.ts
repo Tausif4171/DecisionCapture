@@ -13,3 +13,7 @@ export type DecisionReviewUpdates = {
   alternative?: string | null;
   impact?: string;
 };
+
+export type DecisionReopenInput = {
+  reason: string;
+};

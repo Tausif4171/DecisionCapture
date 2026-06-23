@@ -9,6 +9,7 @@ import {
   getDecision,
   listDecisionAuditLogs,
   listDecisions,
+  reopenDecision,
   rejectDecision,
   updateDecision
 } from "./controller.js";
@@ -24,3 +25,4 @@ decisionsRouter.get("/:id/audit", asyncHandler(listDecisionAuditLogs));
 decisionsRouter.patch("/:id", asyncHandler(updateDecision));
 decisionsRouter.patch("/:id/approve", asyncHandler(approveDecision));
 decisionsRouter.patch("/:id/reject", asyncHandler(rejectDecision));
+decisionsRouter.patch("/:id/reopen", asyncHandler(reopenDecision));

@@ -4,7 +4,10 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const envMock = vi.hoisted(() => ({
   FRONTEND_ORIGIN: "http://localhost:3088",
   APP_BASE_URL: "http://localhost:3088",
-  GITHUB_API_TOKEN: "github-token"
+  GITHUB_API_TOKEN: "github-token",
+  GITHUB_APP_ID: undefined,
+  GITHUB_APP_INSTALLATION_ID: undefined,
+  GITHUB_APP_PRIVATE_KEY: undefined
 }));
 
 const loggerMock = vi.hoisted(() => ({
@@ -55,6 +58,7 @@ function buildPendingDecision(overrides: Partial<DecisionMemory> = {}): Decision
     confidence: 0.71,
     status: "PENDING",
     category: "architecture",
+    extractionMethod: "OLLAMA",
     prRecordId: "pr-record-55",
     createdAt: "2026-06-16T06:30:00.000Z",
     updatedAt: "2026-06-16T06:30:00.000Z",
@@ -127,7 +131,12 @@ describe("GitHub service", () => {
           {
             id: 1003,
             body: "<!-- decisioncapture:review-comment -->\nDecisionCapture review text",
-            user: { login: "decisioncapture-bot" }
+            user: { login: "decisioncapture-bot[bot]", type: "Bot" }
+          },
+          {
+            id: 1004,
+            body: "Vercel deployment status",
+            user: { login: "vercel[bot]", type: "Bot" }
           }
         ])
       )

@@ -63,6 +63,7 @@ function buildDecision(overrides: Partial<DecisionMemory> = {}): DecisionMemory 
     confidence: 0.7,
     status: "PENDING",
     category: "architecture",
+    extractionMethod: "OLLAMA",
     prRecordId: "pr-record-88",
     createdAt: "2026-06-16T06:30:00.000Z",
     updatedAt: "2026-06-16T06:30:00.000Z",

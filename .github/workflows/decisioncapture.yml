@@ -41,7 +41,7 @@ jobs:
             filesChanged: [.files[].path? | select(type == "string" and length > 0)],
             commits: [.commits[].messageHeadline? | select(type == "string" and length > 0)],
             reviewers: [.reviews[].author.login? | select(type == "string" and length > 0)],
-            reviewComments: (([.reviews[].body? | select(type == "string" and length > 0)] + [.comments[].body? | select(type == "string" and length > 0 and (contains("<!-- decisioncapture:review-comment -->") | not))]) | unique),
+            reviewComments: (([.reviews[].body? | select(type == "string" and length > 0)] + [.comments[] | select(((.author.login // "") | endswith("[bot]") | not)) | .body? | select(type == "string" and length > 0 and (contains("<!-- decisioncapture:review-comment -->") | not))]) | unique),
             approvals: [.reviews[] | select(.state == "APPROVED") | .author.login? | select(type == "string" and length > 0)],
             labels: [.labels[].name? | select(type == "string" and length > 0)],
             diffSummary: ($diff | split("\n") | map(select(

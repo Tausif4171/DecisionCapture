@@ -9,7 +9,7 @@ async function syncDecisionNotification(context: PRContext, decision: DecisionMe
   try {
     await syncDecisionReviewComment({ context, decision });
   } catch (error) {
-    logger.error({ error, decisionId: decision.id, prNumber: context.prNumber }, "Failed to sync PR review comment");
+    logger.error({ err: error, decisionId: decision.id, prNumber: context.prNumber }, "Failed to sync PR review comment");
   }
 }
 

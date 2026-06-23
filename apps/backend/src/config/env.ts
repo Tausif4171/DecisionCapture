@@ -33,6 +33,9 @@ const envSchema = z
     GITHUB_CLIENT_SECRET: optionalNonEmptyString,
     GITHUB_WEBHOOK_SECRET: optionalNonEmptyString,
     GITHUB_API_TOKEN: optionalNonEmptyString,
+    GITHUB_APP_ID: optionalNonEmptyString,
+    GITHUB_APP_INSTALLATION_ID: optionalNonEmptyString,
+    GITHUB_APP_PRIVATE_KEY: optionalNonEmptyString,
     INGEST_API_TOKEN: optionalNonEmptyString,
     AI_PROVIDER: z.enum(["ollama", "heuristic"]).default("ollama"),
     OLLAMA_BASE_URL: z.string().url().default("http://localhost:11434"),
@@ -82,6 +85,23 @@ const envSchema = z
         code: "custom",
         path: ["AUTH_ALLOWED_LOGINS"],
         message: "At least one allowed or role-assigned GitHub login is required when AUTH_MODE=github"
+      });
+    }
+  })
+  .superRefine((values, context) => {
+    const githubAppValues = [
+      values.GITHUB_APP_ID,
+      values.GITHUB_APP_INSTALLATION_ID,
+      values.GITHUB_APP_PRIVATE_KEY
+    ];
+    const configuredCount = githubAppValues.filter(Boolean).length;
+
+    if (configuredCount > 0 && configuredCount < githubAppValues.length) {
+      context.addIssue({
+        code: "custom",
+        path: ["GITHUB_APP_ID"],
+        message:
+          "GITHUB_APP_ID, GITHUB_APP_INSTALLATION_ID, and GITHUB_APP_PRIVATE_KEY must be configured together"
       });
     }
   });

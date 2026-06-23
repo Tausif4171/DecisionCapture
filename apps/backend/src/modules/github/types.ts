@@ -6,6 +6,7 @@ export type GitHubPullRequestWebhook = z.infer<typeof githubPullRequestWebhookSc
 
 export type GitHubUser = {
   login: string;
+  type?: string;
 };
 
 export type GitHubLabel = {
