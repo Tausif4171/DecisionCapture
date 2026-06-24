@@ -1,4 +1,5 @@
 import type { DecisionScore, ExtractedDecision, PRContext } from "@decisioncapture/shared";
+import { resolvePrimaryCategory } from "../decisions/scoring.js";
 import type { AIProvider } from "./provider.js";
 
 type DecisionSections = Partial<Record<"decision" | "reason" | "alternative" | "impact", string>>;
@@ -72,7 +73,7 @@ export class HeuristicAIProvider implements AIProvider {
       author: context.author,
       source: `PR #${context.prNumber}`,
       confidence: fallbackConfidence(sections, context),
-      category: score.categories[0] ?? "architecture",
+      category: resolvePrimaryCategory(context, score),
       extractionMethod: "STRUCTURED_FALLBACK"
     };
   }

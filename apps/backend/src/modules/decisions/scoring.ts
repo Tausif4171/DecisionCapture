@@ -3,6 +3,47 @@ import type { DecisionScore, PRContext } from "@decisioncapture/shared";
 const cssOnlyPattern = /\.(css|scss|sass|less|pcss)$/i;
 const docsOnlyPattern = /(^|\/)(README|CHANGELOG|CONTRIBUTING|LICENSE)(\.[a-z]+)?$|\.mdx?$/i;
 
+const primaryCategories = [
+  "architecture",
+  "security",
+  "database",
+  "api",
+  "infrastructure",
+  "dependencies",
+  "performance",
+  "collaboration"
+] as const;
+
+type PrimaryCategory = (typeof primaryCategories)[number];
+
+const categoryPatterns: Record<PrimaryCategory, RegExp> = {
+  architecture:
+    /\b(architect(?:ure|ural)?|design|boundar(?:y|ies)|provider|adapter|workflow|policy|decision review|extract(?:ion|or)?|fallback|reopen(?:ing)?|modular|abstraction)\b/gi,
+  security:
+    /\b(auth(?:entication|orization)?|oauth|rbac|permission|token|secret|signature|security|encrypt(?:ion|ed)?|csrf|hmac)\b/gi,
+  database:
+    /\b(database|postgres(?:ql)?|prisma|schema|migration|sql|persistence|storage|transaction|index)\b/gi,
+  api: /\b(api|endpoint|route|controller|webhook|openapi|swagger|contract|request|response)\b/gi,
+  infrastructure:
+    /\b(infrastructure|redis|bullmq|queue|worker|docker|kubernetes|k8s|helm|terraform|deploy(?:ment)?)\b/gi,
+  dependencies:
+    /\b(dependenc(?:y|ies)|package|library|framework|upgrade|version|lockfile|npm|pnpm|yarn)\b/gi,
+  performance:
+    /\b(performance|latency|cache|batch|throughput|optimi[sz](?:e|ation)|memory|profil(?:e|ing))\b/gi,
+  collaboration:
+    /\b(review(?:er|s|ed)?|approval|discussion|comment|collaboration|ownership|maintainer|author)\b/gi
+};
+
+const primaryCategorySet = new Set<string>(primaryCategories);
+
+function countMatches(value: string | undefined, pattern: RegExp) {
+  if (!value) {
+    return 0;
+  }
+
+  return Math.min(value.match(pattern)?.length ?? 0, 4);
+}
+
 function textFor(context: PRContext) {
   return [
     context.title,
@@ -143,6 +184,34 @@ export function scoreDecisionContext(context: PRContext, threshold = 35): Decisi
     categories: [...state.categories],
     reasons: state.reasons
   };
+}
+
+export function resolvePrimaryCategory(context: PRContext, score: DecisionScore): PrimaryCategory {
+  const candidates = score.categories.filter((category): category is PrimaryCategory =>
+    primaryCategorySet.has(category)
+  );
+  const categories: PrimaryCategory[] = candidates.length > 0 ? candidates : ["architecture"];
+  const weightedSources = [
+    { value: context.title, weight: 6 },
+    { value: context.description, weight: 3 },
+    { value: context.labels?.join(" "), weight: 5 },
+    { value: context.commits?.join(" "), weight: 2 },
+    { value: context.filesChanged.join(" "), weight: 1.5 },
+    { value: context.reviewComments?.join(" "), weight: 1 },
+    { value: context.diffSummary, weight: 1 }
+  ];
+
+  return categories.reduce(
+    (best, category) => {
+      const intentScore = weightedSources.reduce(
+        (total, source) => total + countMatches(source.value, categoryPatterns[category]) * source.weight,
+        1
+      );
+
+      return intentScore > best.score ? { category, score: intentScore } : best;
+    },
+    { category: categories[0]!, score: Number.NEGATIVE_INFINITY }
+  ).category;
 }
 
 export function resolveDecisionStatus(confidence: number, autoApproveConfidence: number) {

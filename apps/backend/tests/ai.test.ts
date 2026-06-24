@@ -1,6 +1,10 @@
 import type { DecisionScore, PRContext } from "@decisioncapture/shared";
 import { describe, expect, it } from "vitest";
 import { HeuristicAIProvider } from "../src/modules/ai/heuristic.provider.js";
+import {
+  buildOllamaPrompt,
+  normalizeOllamaConfidence
+} from "../src/modules/ai/ollama.provider.js";
 
 const score: DecisionScore = {
   score: 75,
@@ -65,5 +69,40 @@ describe("HeuristicAIProvider", () => {
     expect(extracted.impact).toContain("did not state an explicit impact");
     expect(extracted.decision).not.toContain("Redis");
     expect(extracted.decision).not.toContain("PostgreSQL");
+  });
+});
+
+describe("buildOllamaPrompt", () => {
+  it("keeps explicit decision context while bounding very large PR payloads", () => {
+    const prompt = buildOllamaPrompt(
+      context({
+        filesChanged: Array.from(
+          { length: 100 },
+          (_, index) => `apps/backend/src/modules/example/file-${index}.ts`
+        ),
+        reviewComments: Array.from({ length: 30 }, () => "Review context ".repeat(80)),
+        diffSummary: "large diff line\n".repeat(5_000)
+      }),
+      score
+    );
+
+    expect(prompt).toContain("Use the shared privileged role policy");
+    expect(prompt).toContain("more omitted");
+    expect(prompt).toContain("[truncated]");
+    expect(prompt.length).toBeLessThan(15_000);
+  });
+});
+
+describe("normalizeOllamaConfidence", () => {
+  it("accepts decimal and percentage-style model confidence values", () => {
+    expect(normalizeOllamaConfidence(0.82)).toBe(0.82);
+    expect(normalizeOllamaConfidence(82)).toBe(0.82);
+    expect(normalizeOllamaConfidence("68%")).toBe(0.68);
+    expect(normalizeOllamaConfidence("0.74")).toBe(0.74);
+  });
+
+  it("leaves invalid values for schema validation to reject", () => {
+    expect(normalizeOllamaConfidence(125)).toBe(125);
+    expect(normalizeOllamaConfidence("unknown")).toBe("unknown");
   });
 });

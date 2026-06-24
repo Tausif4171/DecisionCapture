@@ -92,7 +92,18 @@ async function seedPendingDecision() {
       author: "Tausif4171",
       url: `https://github.com/Tausif4171/DecisionCapture/pull/${prNumber}`,
       repository: "Tausif4171/DecisionCapture",
-      filesChanged: ["apps/backend/src/server.ts"],
+      filesChanged: [
+        "apps/backend/src/server.ts",
+        "apps/backend/src/modules/e2e/second.ts",
+        "apps/backend/src/modules/e2e/third.ts",
+        "apps/backend/src/modules/e2e/fourth.ts",
+        "apps/backend/src/modules/e2e/fifth.ts",
+        "apps/backend/src/modules/e2e/sixth.ts",
+        "apps/backend/src/modules/e2e/seventh.ts",
+        "apps/backend/src/modules/e2e/eighth.ts",
+        "apps/backend/src/modules/e2e/ninth.ts",
+        "apps/backend/src/modules/e2e/tenth.ts"
+      ],
       commits: ["feat: log BullMQ worker startup for async decision processing"],
       reviewers: [],
       reviewComments: [],
@@ -149,6 +160,15 @@ test("pending review can be saved as draft and approved separately", async ({ pa
   await expect(page.getByRole("button", { name: "Approve" })).toHaveCount(0);
   await expect(page.getByRole("button", { name: "Reject" })).toHaveCount(0);
   await expect(page.getByRole("heading", { name: editedDecision })).toBeVisible();
+  await expect(page.getByText("apps/backend/src/modules/e2e/eighth.ts", { exact: true })).toBeVisible();
+  await expect(page.getByText("apps/backend/src/modules/e2e/ninth.ts", { exact: true })).toHaveCount(0);
+
+  await page.getByRole("button", { name: "Show all 10 files" }).click();
+  await expect(page.getByText("apps/backend/src/modules/e2e/ninth.ts", { exact: true })).toBeVisible();
+  await expect(page.getByText("apps/backend/src/modules/e2e/tenth.ts", { exact: true })).toBeVisible();
+
+  await page.getByRole("button", { name: "Show fewer" }).click();
+  await expect(page.getByText("apps/backend/src/modules/e2e/ninth.ts", { exact: true })).toHaveCount(0);
 
   await page.getByRole("button", { name: "Reopen review" }).click();
   await page.getByLabel("Reason").fill("New evidence requires another decision review.");

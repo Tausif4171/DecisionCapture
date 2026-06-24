@@ -5,6 +5,8 @@ import { useParams } from "next/navigation";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   Check,
+  ChevronDown,
+  ChevronUp,
   ExternalLink,
   GitBranch,
   History,
@@ -32,6 +34,8 @@ import {
 } from "../../../lib/decision-review";
 import { ErrorState, LoadingState } from "../../components/state-views";
 import { StatusBadge } from "../../components/status-badge";
+
+const FILE_PREVIEW_LIMIT = 8;
 
 function Field({ label, value }: { label: string; value: string }) {
   return (
@@ -71,6 +75,7 @@ export default function DecisionDetailPage() {
   const [draft, setDraft] = useState<DecisionReviewDraft | null>(null);
   const [isReopenDialogOpen, setIsReopenDialogOpen] = useState(false);
   const [reopenReason, setReopenReason] = useState("");
+  const [showAllFiles, setShowAllFiles] = useState(false);
 
   const decisionQuery = useQuery({
     queryKey: ["decision", params.id],
@@ -193,6 +198,11 @@ export default function DecisionDetailPage() {
   if (decisionQuery.error || !decision) {
     return <ErrorState message={decisionQuery.error?.message ?? "Decision was not found"} />;
   }
+
+  const visibleFiles = showAllFiles
+    ? decision.filesChanged
+    : decision.filesChanged.slice(0, FILE_PREVIEW_LIMIT);
+  const hasMoreFiles = decision.filesChanged.length > FILE_PREVIEW_LIMIT;
 
   return (
     <div className="space-y-5">
@@ -361,13 +371,29 @@ export default function DecisionDetailPage() {
           </div>
           <div className="border-t border-neutral-100 pt-4">
             <p className="mb-2 text-xs font-semibold uppercase tracking-normal text-neutral-500">Files changed</p>
-            <div className="space-y-2">
-              {decision.filesChanged.map((file) => (
+            <div id="changed-files-list" className="space-y-2">
+              {visibleFiles.map((file) => (
                 <p key={file} className="break-all rounded-md bg-neutral-50 px-2 py-1 text-xs text-neutral-600">
                   {file}
                 </p>
               ))}
             </div>
+            {hasMoreFiles ? (
+              <button
+                type="button"
+                onClick={() => setShowAllFiles((current) => !current)}
+                aria-expanded={showAllFiles}
+                aria-controls="changed-files-list"
+                className="mt-3 inline-flex min-h-9 items-center gap-1.5 rounded-md px-2 text-xs font-medium text-neutral-700 hover:bg-neutral-100"
+              >
+                {showAllFiles ? (
+                  <ChevronUp className="size-4" aria-hidden="true" />
+                ) : (
+                  <ChevronDown className="size-4" aria-hidden="true" />
+                )}
+                {showAllFiles ? "Show fewer" : `Show all ${decision.filesChanged.length} files`}
+              </button>
+            ) : null}
           </div>
           <div className="border-t border-neutral-100 pt-4">
             <div className="mb-3 flex items-center gap-2 text-sm font-semibold text-neutral-950">

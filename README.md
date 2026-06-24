@@ -148,6 +148,7 @@ For non-Docker development, provide PostgreSQL and Redis matching `.env.example`
 | `AI_PROVIDER` | `ollama` or `heuristic`. |
 | `OLLAMA_BASE_URL` | Ollama API URL. In Docker this is `http://ollama:11434`. |
 | `OLLAMA_MODEL` | Ollama model name, default `llama3.1`. |
+| `OLLAMA_REQUEST_TIMEOUT_MS` | Maximum extraction time in milliseconds. Default `120000` supports local CPU inference. |
 | `USE_HEURISTIC_AI_FALLBACK` | Parses explicit Decision/Reason/Alternative/Impact PR sections if Ollama is unavailable. Fallback records always require review. |
 | `NEXT_PUBLIC_API_URL` | Browser-facing backend URL for the frontend. |
 
