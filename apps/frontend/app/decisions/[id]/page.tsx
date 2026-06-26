@@ -33,9 +33,11 @@ import {
   type DecisionReviewDraft
 } from "../../../lib/decision-review";
 import { ErrorState, LoadingState } from "../../components/state-views";
+import { ReviewReasonCallout } from "../../components/review-reason";
 import { StatusBadge } from "../../components/status-badge";
 
 const FILE_PREVIEW_LIMIT = 8;
+const AUDIT_PREVIEW_LIMIT = 6;
 
 function Field({ label, value }: { label: string; value: string }) {
   return (
@@ -76,6 +78,7 @@ export default function DecisionDetailPage() {
   const [isReopenDialogOpen, setIsReopenDialogOpen] = useState(false);
   const [reopenReason, setReopenReason] = useState("");
   const [showAllFiles, setShowAllFiles] = useState(false);
+  const [showAllAudit, setShowAllAudit] = useState(false);
 
   const decisionQuery = useQuery({
     queryKey: ["decision", params.id],
@@ -203,6 +206,9 @@ export default function DecisionDetailPage() {
     ? decision.filesChanged
     : decision.filesChanged.slice(0, FILE_PREVIEW_LIMIT);
   const hasMoreFiles = decision.filesChanged.length > FILE_PREVIEW_LIMIT;
+  const auditEntries = auditQuery.data ?? [];
+  const visibleAudit = showAllAudit ? auditEntries : auditEntries.slice(0, AUDIT_PREVIEW_LIMIT);
+  const hasMoreAudit = auditEntries.length > AUDIT_PREVIEW_LIMIT;
 
   return (
     <div className="space-y-5">
@@ -296,6 +302,11 @@ export default function DecisionDetailPage() {
           </p>
         ) : !isPendingDecision ? (
           <p className="mt-3 text-sm text-neutral-500">{readOnlyMessage}</p>
+        ) : null}
+        {isPendingDecision && decision.reviewReason ? (
+          <div className="mt-4 max-w-3xl">
+            <ReviewReasonCallout decision={decision} />
+          </div>
         ) : null}
       </section>
 
@@ -401,9 +412,9 @@ export default function DecisionDetailPage() {
               Review
             </div>
             <div className="space-y-2 text-xs text-neutral-600">
-              {auditQuery.data?.length ? (
+              {visibleAudit.length ? (
                 <ol className="space-y-2">
-                  {auditQuery.data.map((entry) => (
+                  {visibleAudit.map((entry) => (
                     <li key={entry.id} className="rounded-md border border-neutral-100 px-2 py-2">
                       <span className="font-medium text-neutral-800">
                         {formatAuditAction(entry.action, entry.actorLogin)}
@@ -416,6 +427,15 @@ export default function DecisionDetailPage() {
               ) : (
                 <p className="text-neutral-500">Audit history is unavailable for this legacy record.</p>
               )}
+              {hasMoreAudit ? (
+                <button
+                  type="button"
+                  onClick={() => setShowAllAudit((current) => !current)}
+                  className="mt-2 inline-flex min-h-8 items-center rounded-md px-2 text-xs font-medium text-neutral-700 hover:bg-neutral-100"
+                >
+                  {showAllAudit ? "Show recent activity" : `Show all ${auditEntries.length} events`}
+                </button>
+              ) : null}
             </div>
           </div>
         </aside>

@@ -6,10 +6,16 @@ const styles: Record<DecisionStatus, string> = {
   REJECTED: "border-neutral-200 bg-neutral-100 text-neutral-600"
 };
 
+const labels: Record<DecisionStatus, string> = {
+  APPROVED: "Approved",
+  PENDING: "Pending",
+  REJECTED: "Rejected"
+};
+
 export function StatusBadge({ status }: { status: DecisionStatus }) {
   return (
     <span className={`inline-flex items-center rounded-md border px-2 py-1 text-xs font-semibold ${styles[status]}`}>
-      {status.toLowerCase()}
+      {labels[status]}
     </span>
   );
 }

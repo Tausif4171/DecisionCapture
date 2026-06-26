@@ -1,8 +1,10 @@
 import type {
   AnalyzeResponse,
   DecisionAuditEntry,
+  DecisionExtractionMethod,
   DecisionListResponse,
   DecisionMemory,
+  DecisionReviewReason,
   DecisionStatus,
   DecisionStats,
   PRContext
@@ -15,13 +17,40 @@ import type { DecisionMemoryRecord } from "../database/types.js";
 import { createAIProvider } from "../ai/index.js";
 import type { AIProvider } from "../ai/provider.js";
 import { privilegedRoles, reopenRoles, type ReviewActor } from "../auth/types.js";
+import { assessExplanationEvidence, MISSING_REASON } from "./evidence.js";
 import { resolveDecisionStatus, scoreDecisionContext } from "./scoring.js";
 import type { DecisionReopenInput, DecisionReviewUpdates, DecisionSearchOptions } from "./types.js";
 import { prContextSchema } from "./validation.js";
 
+function reviewReasonForDecision(decision: {
+  status: DecisionStatus;
+  extractionMethod: DecisionExtractionMethod;
+  reason: string;
+  lastEditedByLogin?: string | null;
+}): DecisionReviewReason {
+  if (decision.status !== "PENDING") {
+    return null;
+  }
+
+  if (decision.reason === MISSING_REASON) {
+    return "MISSING_EXPLANATION";
+  }
+
+  if (decision.extractionMethod === "STRUCTURED_FALLBACK") {
+    return "STRUCTURED_FALLBACK";
+  }
+
+  if (decision.lastEditedByLogin) {
+    return "AWAITING_REVIEW";
+  }
+
+  return "LOW_CONFIDENCE";
+}
+
 function toDecisionMemory(decision: DecisionMemoryRecord): DecisionMemory {
   return {
     ...decision,
+    reviewReason: reviewReasonForDecision(decision),
     approvedAt: decision.approvedAt?.toISOString() ?? null,
     rejectedAt: decision.rejectedAt?.toISOString() ?? null,
     createdAt: decision.createdAt.toISOString(),
@@ -131,10 +160,15 @@ export class DecisionService {
     });
 
     const extracted = await this.aiProvider.extractDecision(context, score);
+    const evidence = assessExplanationEvidence(context);
+    const missingExplicitReason = !evidence.hasExplicitReason;
+    const confidence = missingExplicitReason
+      ? Math.min(extracted.confidence, 0.49)
+      : extracted.confidence;
     const status = (
-      extracted.extractionMethod === "STRUCTURED_FALLBACK"
+      missingExplicitReason || extracted.extractionMethod === "STRUCTURED_FALLBACK" || !env.AUTO_APPROVAL_ENABLED
         ? "PENDING"
-        : resolveDecisionStatus(extracted.confidence, env.AUTO_APPROVE_CONFIDENCE)
+        : resolveDecisionStatus(confidence, env.AUTO_APPROVE_CONFIDENCE)
     ) as DecisionStatus;
 
     const existingDecision = await prisma.decisionMemory.findFirst({
@@ -144,14 +178,14 @@ export class DecisionService {
 
     const decisionPayload = {
       decision: extracted.decision,
-      reason: extracted.reason,
+      reason: missingExplicitReason ? MISSING_REASON : extracted.reason,
       alternative: extracted.alternative,
       impact: extracted.impact,
       author: extracted.author,
       sourcePR: extracted.source,
       repository: context.repository,
       filesChanged: context.filesChanged,
-      confidence: extracted.confidence,
+      confidence,
       status,
       category: extracted.category,
       extractionMethod: extracted.extractionMethod,
@@ -243,6 +277,7 @@ export class DecisionService {
       prisma.decisionMemory.findMany({
         where,
         orderBy,
+        skip: options.offset ?? 0,
         take: options.limit ?? 30
       }),
       prisma.decisionMemory.count({ where })

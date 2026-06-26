@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { DecisionMemory } from "@decisioncapture/shared";
-import { Check, Save, X } from "lucide-react";
+import { Check, GitBranch, Save, UserRound, X } from "lucide-react";
 import { approveDecision, listDecisions, rejectDecision, updateDecision } from "../../lib/api";
 import {
   hasDecisionReviewChanges,
@@ -12,6 +12,7 @@ import {
 } from "../../lib/decision-review";
 import { EmptyState, ErrorState, LoadingState } from "../components/state-views";
 import { StatusBadge } from "../components/status-badge";
+import { ReviewReasonCallout } from "../components/review-reason";
 
 function PendingDecisionEditor({ decision }: { decision: DecisionMemory }) {
   const queryClient = useQueryClient();
@@ -71,10 +72,26 @@ function PendingDecisionEditor({ decision }: { decision: DecisionMemory }) {
       className="rounded-md border border-neutral-200 bg-white p-4 shadow-sm"
       data-testid={`pending-decision-${decision.id}`}
     >
-      <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-        <div className="flex flex-wrap items-center gap-2">
-          <StatusBadge status={decision.status} />
-          <span className="text-xs text-neutral-500">{Math.round(decision.confidence * 100)}% confidence</span>
+      <div className="mb-4 flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+        <div className="min-w-0 space-y-3">
+          <div className="flex flex-wrap items-center gap-2">
+            <StatusBadge status={decision.status} />
+            <span className="rounded-md border border-blue-100 bg-blue-50 px-2 py-1 text-xs font-semibold text-blue-700">
+              {decision.category}
+            </span>
+            <span className="text-xs text-neutral-500">{Math.round(decision.confidence * 100)}% confidence</span>
+          </div>
+          <h2 className="text-base font-semibold text-neutral-950">{decision.decision}</h2>
+          <div className="flex flex-wrap gap-3 text-xs text-neutral-500">
+            <span className="inline-flex items-center gap-1">
+              <GitBranch className="size-3.5" aria-hidden="true" />
+              {decision.repository} {decision.sourcePR}
+            </span>
+            <span className="inline-flex items-center gap-1">
+              <UserRound className="size-3.5" aria-hidden="true" />
+              {decision.author}
+            </span>
+          </div>
         </div>
         <div className="flex flex-wrap gap-2">
           <button
@@ -109,6 +126,11 @@ function PendingDecisionEditor({ decision }: { decision: DecisionMemory }) {
           </button>
         </div>
       </div>
+      {decision.reviewReason ? (
+        <div className="mb-4">
+          <ReviewReasonCallout decision={decision} />
+        </div>
+      ) : null}
       <div className="grid gap-3">
         <label>
           <span className="text-xs font-semibold uppercase tracking-normal text-neutral-500">Decision</span>

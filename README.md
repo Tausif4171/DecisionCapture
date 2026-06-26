@@ -150,6 +150,8 @@ For non-Docker development, provide PostgreSQL and Redis matching `.env.example`
 | `OLLAMA_MODEL` | Ollama model name, default `llama3.1`. |
 | `OLLAMA_REQUEST_TIMEOUT_MS` | Maximum extraction time in milliseconds. Default `120000` supports local CPU inference. |
 | `USE_HEURISTIC_AI_FALLBACK` | Parses explicit Decision/Reason/Alternative/Impact PR sections if Ollama is unavailable. Fallback records always require review. |
+| `AUTO_APPROVAL_ENABLED` | Set to `false` when you want every captured memory to stay pending during a human-review rollout. |
+| `AUTO_APPROVE_CONFIDENCE` | Minimum confidence for auto-approval. Auto-approval still requires explicit reasoning evidence in the PR description or discussion. |
 | `NEXT_PUBLIC_API_URL` | Browser-facing backend URL for the frontend. |
 
 To use a real Ollama model in Docker:
@@ -159,6 +161,8 @@ docker compose exec ollama ollama pull llama3.1
 ```
 
 Pulling the model is required for real AI extraction. Without it, the backend safely creates a pending draft only from explicit PR sections and honest missing-context placeholders; it never auto-approves fallback output.
+
+DecisionCapture only auto-approves when all of these are true: auto-approval is enabled, extraction did not use fallback, the PR contains explicit reasoning evidence, and confidence is at or above `AUTO_APPROVE_CONFIDENCE`. Missing rationale, fallback extraction, or low confidence always stays pending for review.
 
 ## API
 

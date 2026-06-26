@@ -98,6 +98,16 @@ function decisionUrl(decision: DecisionMemory) {
 function buildDecisionReviewComment(context: PRContext, decision: DecisionMemory) {
   const url = decisionUrl(decision);
   const authorMention = context.author ? `@${context.author}` : "PR author";
+  const pendingReason =
+    decision.reviewReason === "MISSING_EXPLANATION"
+      ? "DecisionCapture found a meaningful technical change, but the PR context does not clearly explain why this approach was chosen."
+      : decision.reviewReason === "STRUCTURED_FALLBACK"
+        ? "DecisionCapture used the structured fallback extractor and needs a human check before saving this memory."
+        : `DecisionCapture found a low-confidence ${decision.category} decision in this merged PR.`;
+  const pendingAsk =
+    decision.reviewReason === "MISSING_EXPLANATION"
+      ? "can you add the missing rationale and approve, edit, or reject this captured memory?"
+      : "can you review the captured context and approve, edit, or reject it?";
 
   if (decision.status === "APPROVED") {
     return `${REVIEW_COMMENT_MARKER}
@@ -121,9 +131,9 @@ ${decision.rejectedByLogin ? `Rejected by: @${decision.rejectedByLogin}\n` : ""}
 
   return `${REVIEW_COMMENT_MARKER}
 
-DecisionCapture found a low-confidence ${decision.category} decision in this merged PR.
+${pendingReason}
 
-${authorMention}, can you review the captured context and approve, edit, or reject it?
+${authorMention}, ${pendingAsk}
 
 Decision: ${decision.decision}
 Reason: ${decision.reason}

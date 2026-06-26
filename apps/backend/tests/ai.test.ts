@@ -87,6 +87,7 @@ describe("buildOllamaPrompt", () => {
     );
 
     expect(prompt).toContain("Use the shared privileged role policy");
+    expect(prompt).toContain("Do not invent a reason");
     expect(prompt).toContain("more omitted");
     expect(prompt).toContain("[truncated]");
     expect(prompt.length).toBeLessThan(15_000);

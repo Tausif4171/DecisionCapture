@@ -5,6 +5,13 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Github, LogOut } from "lucide-react";
 import { authLoginUrl, getAuthStatus, logout } from "../../lib/api";
 
+const roleLabels = {
+  ADMIN: "Admin",
+  MAINTAINER: "Maintainer",
+  REVIEWER: "Reviewer",
+  VIEWER: "Viewer"
+};
+
 export function AuthStatusControl() {
   const pathname = usePathname();
   const queryClient = useQueryClient();
@@ -48,8 +55,8 @@ export function AuthStatusControl() {
           <Github className="size-4" aria-hidden="true" />
         )}
         <span className="font-medium">{user.login}</span>
-        <span className="rounded-md bg-neutral-100 px-1.5 py-0.5 text-[11px] font-semibold text-neutral-500">
-          {user.role.toLowerCase()}
+        <span className="rounded-md bg-emerald-50 px-1.5 py-0.5 text-[11px] font-semibold text-emerald-700">
+          {roleLabels[user.role]}
         </span>
       </span>
       <button

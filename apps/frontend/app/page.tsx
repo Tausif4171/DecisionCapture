@@ -5,7 +5,6 @@ import { useQuery } from "@tanstack/react-query";
 import { ArrowUpRight, CheckCircle2, Clock3, Database, GitPullRequestArrow, XCircle } from "lucide-react";
 import { getStats } from "../lib/api";
 import { DecisionCard } from "./components/decision-card";
-import { DemoButton } from "./components/demo-button";
 import { EmptyState, ErrorState, LoadingState } from "./components/state-views";
 
 const metricIcons = {
@@ -30,24 +29,34 @@ export default function DashboardPage() {
   }
 
   const stats = statsQuery.data;
+  const total = stats?.totalDecisions ?? 0;
+  const pending = stats?.pendingDecisions ?? 0;
+  const approved = stats?.approvedDecisions ?? 0;
+  const reviewRate = total > 0 ? Math.round((approved / total) * 100) : 0;
   const metrics = [
-    { label: "Total decisions", value: stats?.totalDecisions ?? 0, icon: metricIcons.total },
-    { label: "Approved", value: stats?.approvedDecisions ?? 0, icon: metricIcons.approved },
-    { label: "Pending", value: stats?.pendingDecisions ?? 0, icon: metricIcons.pending },
+    { label: "Total decisions", value: total, icon: metricIcons.total },
+    { label: "Approved", value: approved, icon: metricIcons.approved },
+    { label: "Pending review", value: pending, icon: metricIcons.pending },
     { label: "Rejected", value: stats?.rejectedDecisions ?? 0, icon: metricIcons.rejected }
   ];
 
   return (
     <div className="space-y-6">
-      <section className="flex flex-col gap-4 rounded-md border border-neutral-200 bg-white p-5 shadow-sm md:flex-row md:items-center md:justify-between">
+      <section className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
         <div>
-          <p className="text-sm font-semibold uppercase tracking-normal text-emerald-700">Merged PR memory</p>
-          <h1 className="mt-1 text-2xl font-semibold text-neutral-950">Engineering decisions that stay findable</h1>
+          <p className="text-sm font-medium text-emerald-700">Merged PR memory</p>
+          <h1 className="mt-1 text-2xl font-semibold text-neutral-950">Decision operations</h1>
           <p className="mt-2 max-w-3xl text-sm leading-6 text-neutral-600">
-            DecisionCapture scores merged pull requests, extracts the reason behind meaningful technical changes, and keeps low-confidence memories in review.
+            Monitor captured engineering decisions, pending review work, and the categories building up in team memory.
           </p>
         </div>
-        <DemoButton />
+        <Link
+          href="/pending"
+          className="inline-flex min-h-10 items-center justify-center gap-2 rounded-md bg-neutral-950 px-3 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-neutral-800"
+        >
+          Review queue
+          <ArrowUpRight className="size-4" aria-hidden="true" />
+        </Link>
       </section>
 
       <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
@@ -60,6 +69,28 @@ export default function DashboardPage() {
             <p className="mt-3 text-3xl font-semibold text-neutral-950">{metric.value}</p>
           </div>
         ))}
+      </section>
+
+      <section className="rounded-md border border-neutral-200 bg-white p-4 shadow-sm">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <h2 className="text-sm font-semibold text-neutral-950">Capture quality</h2>
+            <p className="mt-1 text-sm text-neutral-600">
+              {pending > 0
+                ? `${pending} decision${pending === 1 ? "" : "s"} need human confirmation before they become permanent memory.`
+                : "No pending review work. High-confidence memories are ready for search."}
+            </p>
+          </div>
+          <div className="min-w-48">
+            <div className="mb-1 flex items-center justify-between text-xs text-neutral-500">
+              <span>Approved share</span>
+              <span>{reviewRate}%</span>
+            </div>
+            <div className="h-2 rounded-md bg-neutral-100">
+              <div className="h-2 rounded-md bg-emerald-500" style={{ width: `${reviewRate}%` }} />
+            </div>
+          </div>
+        </div>
       </section>
 
       <section className="grid gap-6 lg:grid-cols-[1.5fr_1fr]">
@@ -83,7 +114,7 @@ export default function DashboardPage() {
           ) : (
             <EmptyState
               title="No decisions captured yet"
-              description="Run the demo PR or send a merged PR payload to start building the memory layer."
+              description="Merge a meaningful PR or send a merged PR payload to start building the memory layer."
             />
           )}
         </div>

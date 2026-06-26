@@ -22,6 +22,7 @@ vi.mock("../src/modules/database/prisma.js", () => ({
   prisma: mockPrisma
 }));
 
+import { MISSING_REASON } from "../src/modules/decisions/evidence.js";
 import { DecisionService } from "../src/modules/decisions/service.js";
 
 function buildContext(overrides: Partial<PRContext> = {}): PRContext {
@@ -225,6 +226,97 @@ describe("DecisionService", () => {
         })
       })
     );
+  });
+
+  it("approves a high-confidence decision when review discussion contains the reason", async () => {
+    const aiProvider = {
+      extractDecision: vi.fn().mockResolvedValue(
+        buildExtractedDecision({
+          confidence: 0.91,
+          reason:
+            "Only admin routes need this validation, so keeping the check at the route layer avoids changing public request paths."
+        })
+      )
+    };
+    const service = new DecisionService(aiProvider);
+
+    mockPrisma.pullRequestRecord.upsert.mockResolvedValue({ id: "pr-record-discussion" });
+    mockPrisma.decisionMemory.findFirst.mockResolvedValue(null);
+    mockPrisma.decisionMemory.create.mockResolvedValue(
+      buildDecisionRecord({
+        id: "decision-discussion",
+        status: "APPROVED",
+        confidence: 0.91
+      })
+    );
+
+    await service.analyzePrContext(
+      buildContext({
+        description: "",
+        title: "Validate admin routes at the route layer",
+        reviewComments: [
+          "Why not use global middleware?",
+          "Because only admin routes need this validation, and middleware would affect every request."
+        ]
+      })
+    );
+
+    expect(mockPrisma.decisionMemory.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          status: "APPROVED",
+          confidence: 0.91
+        })
+      })
+    );
+  });
+
+  it("keeps high-confidence extractions pending when the PR has no explicit reason", async () => {
+    const aiProvider = {
+      extractDecision: vi.fn().mockResolvedValue(
+        buildExtractedDecision({
+          confidence: 0.99,
+          reason: "This auth rewrite improves security and reliability."
+        })
+      )
+    };
+    const service = new DecisionService(aiProvider);
+
+    mockPrisma.pullRequestRecord.upsert.mockResolvedValue({ id: "pr-record-missing-reason" });
+    mockPrisma.decisionMemory.findFirst.mockResolvedValue(null);
+    mockPrisma.decisionMemory.create.mockResolvedValue(
+      buildDecisionRecord({
+        id: "decision-missing-reason",
+        status: "PENDING",
+        confidence: 0.49,
+        reason: MISSING_REASON
+      })
+    );
+
+    const result = await service.analyzePrContext(
+      buildContext({
+        title: "Rewrite authentication token handling",
+        description: "",
+        reviewComments: [],
+        filesChanged: Array.from({ length: 25 }, (_, index) => `apps/backend/src/auth/file-${index}.ts`),
+        diffSummary: "Large auth rewrite touching token refresh and protected routes."
+      })
+    );
+
+    expect(mockPrisma.decisionMemory.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          status: "PENDING",
+          reason: MISSING_REASON,
+          confidence: 0.49
+        })
+      })
+    );
+    expect(result.decision).toMatchObject({
+      status: "PENDING",
+      reason: MISSING_REASON,
+      reviewReason: "MISSING_EXPLANATION"
+    });
   });
 
   it("approves a pending decision with edits", async () => {

@@ -31,7 +31,8 @@ export const decisionSearchSchema = z.object({
   repository: z.string().optional(),
   category: z.string().optional(),
   sort: z.enum(["recent", "confidence", "oldest"]).optional().default("recent"),
-  limit: z.coerce.number().int().min(1).max(100).optional().default(30)
+  limit: z.coerce.number().int().min(1).max(100).optional().default(30),
+  offset: z.coerce.number().int().min(0).optional().default(0)
 });
 
 export const decisionReviewSchema = z.object({

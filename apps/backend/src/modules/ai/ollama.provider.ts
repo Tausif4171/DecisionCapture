@@ -2,6 +2,7 @@ import type { DecisionScore, ExtractedDecision, PRContext } from "@decisioncaptu
 import { z } from "zod";
 import { env } from "../../config/env.js";
 import { logger } from "../../config/logger.js";
+import { MISSING_REASON } from "../decisions/evidence.js";
 import { resolvePrimaryCategory } from "../decisions/scoring.js";
 import type { AIProvider } from "./provider.js";
 
@@ -108,6 +109,11 @@ JSON shape:
 }
 
 Confidence must be a decimal from 0 to 1, for example 0.82. Never return 82 or "82%".
+Only use reasoning that is explicitly present in the PR description or review conversation.
+Do not invent a reason from file names, diff size, commits, labels, or generic engineering assumptions.
+If the PR does not explicitly say why the change was made, set reason exactly to:
+"${MISSING_REASON}"
+and set confidence no higher than 0.49.
 
 Decision score: ${score.score}
 Signals: ${score.reasons.join("; ")}

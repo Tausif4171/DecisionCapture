@@ -42,6 +42,7 @@ const envSchema = z
     OLLAMA_MODEL: z.string().default("llama3.1"),
     OLLAMA_REQUEST_TIMEOUT_MS: z.coerce.number().int().min(5_000).max(300_000).default(120_000),
     USE_HEURISTIC_AI_FALLBACK: booleanFromString.default(true),
+    AUTO_APPROVAL_ENABLED: booleanFromString.default(true),
     AUTO_APPROVE_CONFIDENCE: z.coerce.number().min(0).max(1).default(0.78),
     DECISION_SCORE_THRESHOLD: z.coerce.number().min(0).max(100).default(35)
   })

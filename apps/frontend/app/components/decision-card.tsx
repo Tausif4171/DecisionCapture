@@ -1,13 +1,12 @@
 import Link from "next/link";
 import type { DecisionMemory } from "@decisioncapture/shared";
-import { ArrowUpRight, GitBranch, PencilLine, UserCheck, UserRound } from "lucide-react";
+import { ArrowUpRight, GitBranch, UserRound } from "lucide-react";
+import { ReviewSummary } from "./review-reason";
 import { StatusBadge } from "./status-badge";
 
 export function DecisionCard({ decision }: { decision: DecisionMemory }) {
-  const reviewedBy = decision.approvedByLogin ?? decision.rejectedByLogin;
-
   return (
-    <article className="rounded-md border border-neutral-200 bg-white p-4 shadow-sm transition hover:border-neutral-300">
+    <article className="rounded-md border border-neutral-200 bg-white p-4 shadow-sm transition hover:border-neutral-300 hover:shadow">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div className="min-w-0">
           <div className="mb-2 flex flex-wrap items-center gap-2">
@@ -16,6 +15,7 @@ export function DecisionCard({ decision }: { decision: DecisionMemory }) {
               {decision.category}
             </span>
             <span className="text-xs text-neutral-500">{Math.round(decision.confidence * 100)}% confidence</span>
+            <ReviewSummary decision={decision} />
           </div>
           <h3 className="text-base font-semibold text-neutral-950">{decision.decision}</h3>
           <p className="mt-2 line-clamp-2 text-sm leading-6 text-neutral-600">{decision.reason}</p>
@@ -38,17 +38,6 @@ export function DecisionCard({ decision }: { decision: DecisionMemory }) {
           <UserRound className="size-3.5" aria-hidden="true" />
           {decision.author}
         </span>
-        {reviewedBy ? (
-          <span className="inline-flex items-center gap-1">
-            <UserCheck className="size-3.5" aria-hidden="true" />
-            Reviewed by {reviewedBy}
-          </span>
-        ) : decision.lastEditedByLogin ? (
-          <span className="inline-flex items-center gap-1">
-            <PencilLine className="size-3.5" aria-hidden="true" />
-            Draft by {decision.lastEditedByLogin}
-          </span>
-        ) : null}
       </div>
     </article>
   );

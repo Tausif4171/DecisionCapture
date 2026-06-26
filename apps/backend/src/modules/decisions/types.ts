@@ -5,6 +5,7 @@ export type DecisionSearchOptions = {
   category?: string;
   sort?: "recent" | "confidence" | "oldest";
   limit?: number;
+  offset?: number;
 };
 
 export type DecisionReviewUpdates = {

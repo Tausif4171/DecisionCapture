@@ -2,7 +2,7 @@
 
 import { FormEvent, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Filter, Search } from "lucide-react";
+import { ArrowLeft, ArrowRight, Filter, Search, X } from "lucide-react";
 import { listDecisions } from "../../lib/api";
 import { DecisionCard } from "../components/decision-card";
 import { EmptyState, ErrorState, LoadingState } from "../components/state-views";
@@ -12,22 +12,39 @@ export default function DecisionsPage() {
   const [search, setSearch] = useState("");
   const [status, setStatus] = useState("");
   const [sort, setSort] = useState("recent");
+  const [page, setPage] = useState(0);
+  const pageSize = 25;
 
   const decisionsQuery = useQuery({
-    queryKey: ["decisions", { search, status, sort }],
+    queryKey: ["decisions", { search, status, sort, page }],
     queryFn: () =>
       listDecisions({
         q: search,
         status,
         sort,
-        limit: 50
+        limit: pageSize,
+        offset: page * pageSize
       })
   });
 
   function submitSearch(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    setPage(0);
     setSearch(draftSearch);
   }
+
+  function clearFilters() {
+    setDraftSearch("");
+    setSearch("");
+    setStatus("");
+    setSort("recent");
+    setPage(0);
+  }
+
+  const total = decisionsQuery.data?.total ?? 0;
+  const start = total === 0 ? 0 : page * pageSize + 1;
+  const end = Math.min(total, (page + 1) * pageSize);
+  const hasNextPage = end < total;
 
   return (
     <div className="space-y-5">
@@ -54,7 +71,10 @@ export default function DecisionsPage() {
             <span className="sr-only">Filter status</span>
             <select
               value={status}
-              onChange={(event) => setStatus(event.target.value)}
+              onChange={(event) => {
+                setStatus(event.target.value);
+                setPage(0);
+              }}
               className="min-h-10 w-full rounded-md border border-neutral-200 bg-white px-3 text-sm outline-none transition focus:border-neutral-400"
             >
               <option value="">All statuses</option>
@@ -67,7 +87,10 @@ export default function DecisionsPage() {
             <span className="sr-only">Sort decisions</span>
             <select
               value={sort}
-              onChange={(event) => setSort(event.target.value)}
+              onChange={(event) => {
+                setSort(event.target.value);
+                setPage(0);
+              }}
               className="min-h-10 w-full rounded-md border border-neutral-200 bg-white px-3 text-sm outline-none transition focus:border-neutral-400"
             >
               <option value="recent">Recent</option>
@@ -84,6 +107,16 @@ export default function DecisionsPage() {
             Apply
           </button>
         </form>
+        {search || status || sort !== "recent" ? (
+          <button
+            type="button"
+            onClick={clearFilters}
+            className="mt-3 inline-flex min-h-8 items-center gap-2 rounded-md px-2 text-xs font-medium text-neutral-600 hover:bg-neutral-100"
+          >
+            <X className="size-3.5" aria-hidden="true" />
+            Clear filters
+          </button>
+        ) : null}
       </section>
 
       {decisionsQuery.isLoading ? <LoadingState label="Searching decisions" /> : null}
@@ -93,7 +126,31 @@ export default function DecisionsPage() {
       ) : null}
       {decisionsQuery.data?.decisions.length ? (
         <section className="space-y-3">
-          <p className="text-sm text-neutral-500">{decisionsQuery.data.total} decisions found</p>
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <p className="text-sm text-neutral-500">
+              Showing {start}-{end} of {total} decisions
+            </p>
+            <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={() => setPage((current) => Math.max(0, current - 1))}
+                disabled={page === 0}
+                className="inline-flex min-h-9 items-center gap-2 rounded-md border border-neutral-200 bg-white px-3 text-sm font-medium text-neutral-700 hover:bg-neutral-50 disabled:text-neutral-400"
+              >
+                <ArrowLeft className="size-4" aria-hidden="true" />
+                Previous
+              </button>
+              <button
+                type="button"
+                onClick={() => setPage((current) => current + 1)}
+                disabled={!hasNextPage}
+                className="inline-flex min-h-9 items-center gap-2 rounded-md border border-neutral-200 bg-white px-3 text-sm font-medium text-neutral-700 hover:bg-neutral-50 disabled:text-neutral-400"
+              >
+                Next
+                <ArrowRight className="size-4" aria-hidden="true" />
+              </button>
+            </div>
+          </div>
           {decisionsQuery.data.decisions.map((decision) => (
             <DecisionCard key={decision.id} decision={decision} />
           ))}

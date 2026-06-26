@@ -1,14 +1,11 @@
 import type { DecisionScore, ExtractedDecision, PRContext } from "@decisioncapture/shared";
+import { MISSING_IMPACT, MISSING_REASON } from "../decisions/evidence.js";
 import { resolvePrimaryCategory } from "../decisions/scoring.js";
 import type { AIProvider } from "./provider.js";
 
 type DecisionSections = Partial<Record<"decision" | "reason" | "alternative" | "impact", string>>;
 
 const SECTION_PATTERN = /\b(decision|reason|alternatives?|impact)\s*:/gi;
-const MISSING_REASON =
-  "The PR context did not state an explicit reason. Reviewer confirmation is required.";
-const MISSING_IMPACT =
-  "The PR context did not state an explicit impact. Reviewer confirmation is required.";
 
 function cleanSection(value: string) {
   return value

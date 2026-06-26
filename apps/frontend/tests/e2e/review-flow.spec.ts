@@ -174,7 +174,7 @@ test("pending review can be saved as draft and approved separately", async ({ pa
   await page.getByLabel("Reason").fill("New evidence requires another decision review.");
   await page.getByRole("button", { name: "Reopen", exact: true }).click();
 
-  await expect(page.getByText("pending", { exact: true })).toBeVisible();
+  await expect(page.getByText("Pending", { exact: true })).toBeVisible();
   await expect(page.getByText("Review reopened by DecisionCapture")).toBeVisible();
   await expect(page.getByText("New evidence requires another decision review.")).toBeVisible();
 });
