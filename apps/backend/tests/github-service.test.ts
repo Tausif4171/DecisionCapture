@@ -243,4 +243,34 @@ describe("GitHub service", () => {
     expect(body.body).toContain("approve, edit, or reject");
     expect(body.body).toContain("low-confidence architecture decision");
   });
+
+  it("explains reopened review requests without calling them low confidence", async () => {
+    vi.mocked(global.fetch)
+      .mockResolvedValueOnce(jsonResponse([]))
+      .mockResolvedValueOnce(jsonResponse({ id: 9003 }));
+
+    await syncDecisionReviewComment({
+      context: {
+        prNumber: 56,
+        title: "Use single-flight token refresh policy",
+        description: "",
+        author: "maya.dev",
+        url: "https://github.com/acme/platform/pull/56",
+        repository: "acme/platform",
+        filesChanged: []
+      },
+      decision: buildPendingDecision({
+        decision: "Use single-flight token refresh policy",
+        confidence: 1,
+        reviewReason: "REVIEW_REOPENED"
+      })
+    });
+
+    const request = vi.mocked(global.fetch).mock.calls[1]?.[1];
+    const body = JSON.parse(String(request?.body)) as { body: string };
+
+    expect(body.body).toContain("reopened this captured decision for another review");
+    expect(body.body).toContain("confirm, edit, or reject");
+    expect(body.body).not.toContain("low-confidence");
+  });
 });

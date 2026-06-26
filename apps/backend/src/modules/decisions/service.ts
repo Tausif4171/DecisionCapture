@@ -1,5 +1,6 @@
 import type {
   AnalyzeResponse,
+  DecisionAuditAction,
   DecisionAuditEntry,
   DecisionExtractionMethod,
   DecisionListResponse,
@@ -22,14 +23,31 @@ import { resolveDecisionStatus, scoreDecisionContext } from "./scoring.js";
 import type { DecisionReopenInput, DecisionReviewUpdates, DecisionSearchOptions } from "./types.js";
 import { prContextSchema } from "./validation.js";
 
+type DecisionMemoryRecordWithLatestAudit = DecisionMemoryRecord & {
+  auditLogs?: Array<{
+    action: DecisionAuditAction;
+    createdAt: Date;
+  }>;
+};
+
 function reviewReasonForDecision(decision: {
   status: DecisionStatus;
   extractionMethod: DecisionExtractionMethod;
   reason: string;
   lastEditedByLogin?: string | null;
+  auditLogs?: Array<{
+    action: DecisionAuditAction;
+    createdAt: Date;
+  }>;
 }): DecisionReviewReason {
   if (decision.status !== "PENDING") {
     return null;
+  }
+
+  const latestAuditAction = decision.auditLogs?.[0]?.action;
+
+  if (latestAuditAction === "REOPENED") {
+    return "REVIEW_REOPENED";
   }
 
   if (decision.reason === MISSING_REASON) {
@@ -47,7 +65,7 @@ function reviewReasonForDecision(decision: {
   return "LOW_CONFIDENCE";
 }
 
-function toDecisionMemory(decision: DecisionMemoryRecord): DecisionMemory {
+function toDecisionMemory(decision: DecisionMemoryRecordWithLatestAudit): DecisionMemory {
   return {
     ...decision,
     reviewReason: reviewReasonForDecision(decision),
@@ -278,7 +296,13 @@ export class DecisionService {
         where,
         orderBy,
         skip: options.offset ?? 0,
-        take: options.limit ?? 30
+        take: options.limit ?? 30,
+        include: {
+          auditLogs: {
+            orderBy: { createdAt: "desc" },
+            take: 1
+          }
+        }
       }),
       prisma.decisionMemory.count({ where })
     ]);
@@ -290,7 +314,15 @@ export class DecisionService {
   }
 
   async getDecision(id: string): Promise<DecisionMemory | null> {
-    const decision = await prisma.decisionMemory.findUnique({ where: { id } });
+    const decision = await prisma.decisionMemory.findUnique({
+      where: { id },
+      include: {
+        auditLogs: {
+          orderBy: { createdAt: "desc" },
+          take: 1
+        }
+      }
+    });
     return decision ? toDecisionMemory(decision) : null;
   }
 
@@ -585,7 +617,10 @@ export class DecisionService {
         return reopenedDecision;
       });
 
-      return toDecisionMemory(decision);
+      return toDecisionMemory({
+        ...decision,
+        auditLogs: [{ action: "REOPENED", createdAt: new Date() }]
+      });
     } catch (error) {
       if (isMissingDecisionError(error)) {
         throw new HttpError(404, "Decision not found");
@@ -609,7 +644,13 @@ export class DecisionService {
         }),
         prisma.decisionMemory.findMany({
           orderBy: { createdAt: "desc" },
-          take: 5
+          take: 5,
+          include: {
+            auditLogs: {
+              orderBy: { createdAt: "desc" },
+              take: 1
+            }
+          }
         })
       ]);
 

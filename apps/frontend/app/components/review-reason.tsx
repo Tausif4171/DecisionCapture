@@ -21,6 +21,11 @@ const reasonConfig = {
     icon: PencilLine,
     label: "Draft saved",
     description: "A reviewer edited this memory. It stays pending until it is approved or rejected."
+  },
+  REVIEW_REOPENED: {
+    icon: PencilLine,
+    label: "Review reopened",
+    description: "A completed memory was reopened for another pass. Confirm, edit, or reject the updated record."
   }
 };
 
@@ -67,4 +72,3 @@ export function ReviewSummary({ decision }: { decision: DecisionMemory }) {
   const label = reviewReasonLabel(decision);
   return label ? <span className="text-xs text-amber-700">{label}</span> : null;
 }
-

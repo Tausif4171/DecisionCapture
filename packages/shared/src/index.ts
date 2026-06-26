@@ -7,6 +7,7 @@ export type DecisionReviewReason =
   | "STRUCTURED_FALLBACK"
   | "LOW_CONFIDENCE"
   | "AWAITING_REVIEW"
+  | "REVIEW_REOPENED"
   | null;
 
 export interface PRContext {

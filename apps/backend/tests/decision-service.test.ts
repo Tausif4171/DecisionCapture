@@ -672,6 +672,7 @@ describe("DecisionService", () => {
       })
     );
     expect(result.status).toBe("PENDING");
+    expect(result.reviewReason).toBe("REVIEW_REOPENED");
   });
 
   it("does not let a reviewer reopen a completed review", async () => {
