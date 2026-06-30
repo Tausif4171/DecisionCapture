@@ -2,10 +2,11 @@
 
 import { usePathname } from "next/navigation";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import type { AuthStatus, UserRole } from "@decisioncapture/shared";
 import { Github, LogOut } from "lucide-react";
 import { authLoginUrl, getAuthStatus, logout } from "../../lib/api";
 
-const roleLabels = {
+const roleLabels: Record<UserRole, string> = {
   ADMIN: "Admin",
   MAINTAINER: "Maintainer",
   REVIEWER: "Reviewer",
@@ -15,7 +16,7 @@ const roleLabels = {
 export function AuthStatusControl() {
   const pathname = usePathname();
   const queryClient = useQueryClient();
-  const authQuery = useQuery({
+  const authQuery = useQuery<AuthStatus>({
     queryKey: ["auth"],
     queryFn: getAuthStatus,
     staleTime: 60_000
