@@ -8,7 +8,23 @@ import { errorHandler, notFoundHandler } from "./middleware/error.js";
 import { attachCurrentUser } from "./modules/auth/middleware.js";
 import { router } from "./routes.js";
 
-const allowedOrigins = env.FRONTEND_ORIGIN.split(",").map((origin) => origin.trim());
+function normalizeOrigin(origin: string) {
+  return origin.trim().replace(/\/+$/, "");
+}
+
+const allowedOrigins = new Set(
+  env.FRONTEND_ORIGIN.split(",")
+    .map(normalizeOrigin)
+    .filter(Boolean)
+);
+
+export function isAllowedCorsOrigin(origin: string | undefined) {
+  if (!origin) {
+    return true;
+  }
+
+  return allowedOrigins.has(normalizeOrigin(origin));
+}
 
 export function createApp() {
   const app = express();
@@ -16,7 +32,9 @@ export function createApp() {
   app.use(helmet());
   app.use(
     cors({
-      origin: allowedOrigins,
+      origin(origin, callback) {
+        callback(null, isAllowedCorsOrigin(origin));
+      },
       credentials: true
     })
   );

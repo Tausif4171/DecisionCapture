@@ -55,6 +55,10 @@ function configuredLogins(value: string) {
   );
 }
 
+function normalizeOrigin(origin: string) {
+  return origin.trim().replace(/\/+$/, "");
+}
+
 function roleForLogin(login: string): AuthUser["role"] {
   const normalizedLogin = login.toLowerCase();
 
@@ -116,23 +120,22 @@ export function safeReturnTo(value: string | undefined) {
   }
 
   const allowedOrigins = [
-    ...env.FRONTEND_ORIGIN.split(",").map((origin) => origin.trim()),
+    ...env.FRONTEND_ORIGIN.split(",").map(normalizeOrigin),
     env.APP_BASE_URL
-  ].filter((origin): origin is string => Boolean(origin));
+  ]
+    .filter((origin): origin is string => Boolean(origin))
+    .map(normalizeOrigin);
 
   try {
     const url = new URL(value);
-    return allowedOrigins.includes(url.origin) ? `${url.pathname}${url.search}${url.hash}` : "/";
+    return allowedOrigins.includes(normalizeOrigin(url.origin)) ? `${url.pathname}${url.search}${url.hash}` : "/";
   } catch {
     return "/";
   }
 }
 
 export function frontendRedirectUrl(returnTo: string) {
-  const origin = (env.APP_BASE_URL ?? env.FRONTEND_ORIGIN.split(",")[0] ?? "http://localhost:3000").replace(
-    /\/+$/,
-    ""
-  );
+  const origin = normalizeOrigin(env.APP_BASE_URL ?? env.FRONTEND_ORIGIN.split(",")[0] ?? "http://localhost:3000");
 
   return `${origin}${safeReturnTo(returnTo)}`;
 }

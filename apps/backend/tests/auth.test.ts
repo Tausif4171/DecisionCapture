@@ -10,8 +10,8 @@ const envMock = vi.hoisted(() => ({
   AUTH_REVIEWER_LOGINS: "platform-reviewer",
   GITHUB_CLIENT_ID: "client-id",
   GITHUB_CLIENT_SECRET: "client-secret",
-  FRONTEND_ORIGIN: "http://localhost:3088",
-  APP_BASE_URL: "http://localhost:3088"
+  FRONTEND_ORIGIN: "http://localhost:3088/",
+  APP_BASE_URL: "http://localhost:3088/"
 }));
 
 const prismaMock = vi.hoisted(() => ({
