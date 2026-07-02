@@ -32,7 +32,12 @@ vi.mock("../src/modules/database/prisma.js", () => ({
 
 import { safeReturnTo, upsertGitHubUser, userFromSessionToken } from "../src/modules/auth/service.js";
 import { requireCurrentUser } from "../src/modules/auth/middleware.js";
-import { createSessionToken, verifySessionToken } from "../src/modules/auth/token.js";
+import {
+  createOAuthState,
+  createSessionToken,
+  verifyOAuthState,
+  verifySessionToken
+} from "../src/modules/auth/token.js";
 
 describe("GitHub dashboard auth", () => {
   beforeEach(() => {
@@ -44,6 +49,13 @@ describe("GitHub dashboard auth", () => {
 
     expect(verifySessionToken(token)).toMatchObject({ userId: "user-1" });
     expect(verifySessionToken(`${token}tampered`)).toBeNull();
+  });
+
+  it("accepts signed OAuth state without relying on transient browser cookies", () => {
+    const state = createOAuthState("/pending");
+
+    expect(verifyOAuthState(state)).toMatchObject({ returnTo: "/pending" });
+    expect(verifyOAuthState(`${state}tampered`)).toBeNull();
   });
 
   it("only permits local paths or configured frontend origins as OAuth return targets", () => {

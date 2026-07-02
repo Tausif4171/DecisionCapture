@@ -4,7 +4,6 @@ import {
   clearCookie,
   oauthStateCookie,
   oauthStateCookieName,
-  parseCookies,
   sessionCookie,
   sessionCookieName
 } from "./cookies.js";
@@ -43,16 +42,14 @@ export async function githubCallback(request: Request, response: Response) {
 
   const code = typeof request.query.code === "string" ? request.query.code : undefined;
   const state = typeof request.query.state === "string" ? request.query.state : undefined;
-  const cookies = parseCookies(request.header("cookie"));
-  const expectedState = cookies.get(oauthStateCookieName);
 
-  if (!code || !state || !expectedState || state !== expectedState) {
+  if (!code || !state) {
     throw new HttpError(400, "Invalid GitHub OAuth callback state");
   }
 
   const verifiedState = verifyOAuthState(state);
   if (!verifiedState) {
-    throw new HttpError(400, "GitHub OAuth state expired");
+    throw new HttpError(400, "Invalid GitHub OAuth callback state");
   }
 
   const accessToken = await exchangeGitHubCode(code);
