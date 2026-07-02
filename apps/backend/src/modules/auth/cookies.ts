@@ -28,7 +28,7 @@ function serializeCookie(name: string, value: string, maxAgeSeconds: number) {
     `${name}=${encodeURIComponent(value)}`,
     "Path=/",
     "HttpOnly",
-    "SameSite=Lax",
+    env.NODE_ENV === "production" ? "SameSite=None" : "SameSite=Lax",
     `Max-Age=${maxAgeSeconds}`
   ];
 
