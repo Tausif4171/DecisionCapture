@@ -109,7 +109,7 @@ export default function DecisionDetailPage() {
   const readOnlyMessage =
     decision?.status === "APPROVED"
       ? "Approved decisions are locked so the final engineering memory stays auditable."
-      : "Rejected decisions stay read-only as review history.";
+      : "Rejected memories are kept read-only for audit. Reopen review if this decision needs another pass.";
 
   const updateMutation = useMutation({
     mutationFn: () => updateDecision(params.id, formValue!),
