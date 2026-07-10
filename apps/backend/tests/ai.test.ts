@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import { HeuristicAIProvider } from "../src/modules/ai/heuristic.provider.js";
 import {
   buildOllamaPrompt,
+  isOllamaModelAvailable,
   normalizeOllamaConfidence
 } from "../src/modules/ai/ollama.provider.js";
 
@@ -105,5 +106,16 @@ describe("normalizeOllamaConfidence", () => {
   it("leaves invalid values for schema validation to reject", () => {
     expect(normalizeOllamaConfidence(125)).toBe(125);
     expect(normalizeOllamaConfidence("unknown")).toBe("unknown");
+  });
+});
+
+describe("isOllamaModelAvailable", () => {
+  it("treats an untagged model name as the latest Ollama tag", () => {
+    expect(isOllamaModelAvailable("llama3.1", ["llama3.1:latest"])).toBe(true);
+  });
+
+  it("requires an exact match when the configured model includes a tag", () => {
+    expect(isOllamaModelAvailable("qwen2.5-coder:32b", ["qwen2.5-coder:32b"])).toBe(true);
+    expect(isOllamaModelAvailable("qwen2.5-coder:latest", ["qwen2.5-coder:32b"])).toBe(false);
   });
 });

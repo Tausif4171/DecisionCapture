@@ -14,7 +14,7 @@
     "test": "npm run test -w @decisioncapture/backend",
     "test:e2e": "npm run test:e2e -w @decisioncapture/frontend",
     "ollama:proxy": "node scripts/ollama-ngrok-proxy.mjs",
-    "ollama:tunnel": "concurrently \"npm run ollama:proxy\" \"ngrok http 11435\"",
+    "ollama:tunnel": "concurrently \"npm run ollama:proxy\" \"ngrok http --log=stdout 11435\"",
     "db:generate": "npm run db:generate -w @decisioncapture/backend",
     "db:push": "npm run db:push -w @decisioncapture/backend",
     "db:migrate": "npm run db:migrate -w @decisioncapture/backend"

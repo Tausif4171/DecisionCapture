@@ -64,6 +64,16 @@ async function readResponseSnippet(response: Response) {
   return text.trim().slice(0, 500);
 }
 
+export function isOllamaModelAvailable(configuredModel: string, availableModels: string[]) {
+  const candidates = new Set([configuredModel]);
+
+  if (!configuredModel.includes(":")) {
+    candidates.add(`${configuredModel}:latest`);
+  }
+
+  return availableModels.some((model) => candidates.has(model));
+}
+
 export async function checkOllamaHealth() {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), Math.min(env.OLLAMA_REQUEST_TIMEOUT_MS, 10_000));
@@ -88,7 +98,10 @@ export async function checkOllamaHealth() {
     }
 
     const payload = (await response.json()) as { models?: Array<{ name?: string }> };
-    const models = payload.models?.map((model) => model.name).filter(Boolean) ?? [];
+    const models =
+      payload.models
+        ?.map((model) => model.name)
+        .filter((model): model is string => Boolean(model)) ?? [];
 
     return {
       provider: env.AI_PROVIDER,
@@ -96,7 +109,7 @@ export async function checkOllamaHealth() {
       ...config,
       reachable: true,
       status: response.status,
-      modelAvailable: models.includes(env.OLLAMA_MODEL),
+      modelAvailable: isOllamaModelAvailable(env.OLLAMA_MODEL, models),
       models
     };
   } catch (error) {
