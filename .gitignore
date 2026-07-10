@@ -11,3 +11,4 @@ apps/**/test-results
 *.tsbuildinfo
 .DS_Store
 apps/backend/prisma/dev.db
+DecisionCapture.md
