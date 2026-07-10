@@ -1,8 +1,10 @@
 import { Router } from "express";
+import { asyncHandler } from "./middleware/async-handler.js";
 import { authRouter } from "./modules/auth/routes.js";
 import { decisionsRouter } from "./modules/decisions/routes.js";
 import { demoRouter } from "./modules/demo/routes.js";
 import { githubRouter } from "./modules/github/routes.js";
+import { checkOllamaHealth } from "./modules/ai/ollama.provider.js";
 
 export const router = Router();
 
@@ -12,6 +14,13 @@ router.get("/health", (_request, response) => {
     service: "decisioncapture-backend"
   });
 });
+
+router.get(
+  "/health/ai",
+  asyncHandler(async (_request, response) => {
+    response.json(await checkOllamaHealth());
+  })
+);
 
 router.use("/auth", authRouter);
 router.use("/github", githubRouter);

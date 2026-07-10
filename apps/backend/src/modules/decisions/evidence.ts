@@ -22,7 +22,7 @@ function normalizeEvidenceText(value: string | undefined) {
     .replace(/```[\s\S]*?```/g, " ")
     .replace(/`[^`]*`/g, " ")
     .replace(/https?:\/\/\S+/g, " ")
-    .replace(/[#>*_\-]+/g, " ")
+    .replace(/[#>*_-]+/g, " ")
     .replace(/\s+/g, " ")
     .trim();
 }

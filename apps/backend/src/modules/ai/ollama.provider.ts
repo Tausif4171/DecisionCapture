@@ -32,6 +32,86 @@ const extractedDecisionSchema = z.object({
   category: z.string().min(1).default("architecture")
 });
 
+export function ollamaApiUrl(path: string) {
+  return `${env.OLLAMA_BASE_URL.replace(/\/+$/, "")}${path}`;
+}
+
+export function ollamaRequestHeaders() {
+  return {
+    accept: "application/json",
+    "content-type": "application/json",
+    "ngrok-skip-browser-warning": "true",
+    "user-agent": "DecisionCapture"
+  };
+}
+
+export function ollamaBaseUrlDiagnostic() {
+  const url = new URL(env.OLLAMA_BASE_URL);
+  const localhostNames = new Set(["localhost", "127.0.0.1", "::1"]);
+  const pointsAtLocalhost = localhostNames.has(url.hostname);
+
+  return {
+    baseUrl: env.OLLAMA_BASE_URL,
+    pointsAtLocalhost,
+    warning: pointsAtLocalhost
+      ? "OLLAMA_BASE_URL points at localhost. In a cloud deployment this means the cloud container, not your laptop."
+      : null
+  };
+}
+
+async function readResponseSnippet(response: Response) {
+  const text = await response.text().catch(() => "");
+  return text.trim().slice(0, 500);
+}
+
+export async function checkOllamaHealth() {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), Math.min(env.OLLAMA_REQUEST_TIMEOUT_MS, 10_000));
+  const config = ollamaBaseUrlDiagnostic();
+
+  try {
+    const response = await fetch(ollamaApiUrl("/api/tags"), {
+      method: "GET",
+      headers: ollamaRequestHeaders(),
+      signal: controller.signal
+    });
+
+    if (!response.ok) {
+      return {
+        provider: env.AI_PROVIDER,
+        model: env.OLLAMA_MODEL,
+        ...config,
+        reachable: false,
+        status: response.status,
+        error: await readResponseSnippet(response)
+      };
+    }
+
+    const payload = (await response.json()) as { models?: Array<{ name?: string }> };
+    const models = payload.models?.map((model) => model.name).filter(Boolean) ?? [];
+
+    return {
+      provider: env.AI_PROVIDER,
+      model: env.OLLAMA_MODEL,
+      ...config,
+      reachable: true,
+      status: response.status,
+      modelAvailable: models.includes(env.OLLAMA_MODEL),
+      models
+    };
+  } catch (error) {
+    return {
+      provider: env.AI_PROVIDER,
+      model: env.OLLAMA_MODEL,
+      ...config,
+      reachable: false,
+      error: error instanceof Error ? error.message : String(error)
+    };
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
 function extractJson(text: string) {
   const match = text.match(/\{[\s\S]*\}/);
   if (!match) {
@@ -131,9 +211,9 @@ export class OllamaAIProvider implements AIProvider {
     const timeout = setTimeout(() => controller.abort(), env.OLLAMA_REQUEST_TIMEOUT_MS);
 
     try {
-      const response = await fetch(`${env.OLLAMA_BASE_URL}/api/generate`, {
+      const response = await fetch(ollamaApiUrl("/api/generate"), {
         method: "POST",
-        headers: { "content-type": "application/json" },
+        headers: ollamaRequestHeaders(),
         signal: controller.signal,
         body: JSON.stringify({
           model: env.OLLAMA_MODEL,
@@ -149,7 +229,10 @@ export class OllamaAIProvider implements AIProvider {
       });
 
       if (!response.ok) {
-        throw new Error(`Ollama responded with HTTP ${response.status}`);
+        const responseSnippet = await readResponseSnippet(response);
+        throw new Error(
+          `Ollama responded with HTTP ${response.status}${responseSnippet ? `: ${responseSnippet}` : ""}`
+        );
       }
 
       const payload = (await response.json()) as { response?: string };

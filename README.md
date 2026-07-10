@@ -164,6 +164,39 @@ Pulling the model is required for real AI extraction. Without it, the backend sa
 
 DecisionCapture only auto-approves when all of these are true: auto-approval is enabled, extraction did not use fallback, the PR contains explicit reasoning evidence, and confidence is at or above `AUTO_APPROVE_CONFIDENCE`. Missing rationale, fallback extraction, or low confidence always stays pending for review.
 
+### Using Local Ollama From Render
+
+When the backend runs on Render, `OLLAMA_BASE_URL=http://localhost:11434` points at the Render container, not your laptop. Use a public tunnel to a small local proxy instead of tunneling Ollama directly:
+
+```bash
+npm run ollama:proxy
+ngrok http 11435
+```
+
+Or start both processes together:
+
+```bash
+npm run ollama:tunnel
+```
+
+Then set Render:
+
+```env
+AI_PROVIDER=ollama
+USE_HEURISTIC_AI_FALLBACK=true
+OLLAMA_BASE_URL=https://your-ngrok-domain.ngrok-free.dev
+OLLAMA_MODEL=llama3.1
+OLLAMA_REQUEST_TIMEOUT_MS=120000
+```
+
+Restart or redeploy the Render service after changing environment variables. Verify what the deployed backend can see:
+
+```bash
+curl https://your-render-service.onrender.com/health/ai
+```
+
+The response should show `"reachable": true` and `"modelAvailable": true`. If it shows `pointsAtLocalhost: true` in production, Render is still configured with a local-only Ollama URL. If it shows an HTTP error from ngrok or Ollama, check that the proxy is running and that the ngrok URL in Render is the current one.
+
 ## API
 
 - `POST /github/webhook` receives GitHub `pull_request.closed` events and only analyzes merged PRs.
