@@ -1,20 +1,20 @@
 # DecisionCapture
 
-DecisionCapture is an engineering memory system that captures important technical decisions from merged GitHub pull requests.
+DecisionCapture is an engineering memory platform that extracts, reviews, and preserves technical decisions from merged GitHub pull requests.
 
-Code shows what changed. PR discussions explain why. DecisionCapture preserves that reasoning before it disappears into old GitHub threads.
+Code shows what changed. PR descriptions and review threads often explain why. DecisionCapture turns that context into searchable, auditable engineering memory before it disappears into old GitHub threads.
 
 ## What It Does
 
 - Accepts merged PR context from GitHub webhooks or the included GitHub Action.
 - Enriches webhook-only ingestion with full PR files, commits, reviews, comments, approvals, and a bounded diff summary through the GitHub API.
-- Scores PRs before AI analysis so low-value noise is ignored.
+- Scores PRs before AI analysis so low-value changes are ignored.
 - Extracts decision, reason, alternative, impact, author, source PR, confidence, and category.
 - Stores approved and pending decision memories in PostgreSQL.
 - Processes capture work asynchronously with BullMQ and Redis.
-- Uses an `AIProvider` abstraction with Ollama plus a conservative structured-PR fallback that never invents canned decisions.
-- Posts and updates PR review comments from the backend when a decision needs review or is later approved, rejected, or reopened.
-- Tags the PR author on pending review comments and includes normal PR conversation comments in analysis context.
+- Uses an `AIProvider` abstraction with Ollama plus a conservative structured-PR fallback that does not invent missing rationale.
+- Auto-approves only evidence-backed, high-confidence AI decisions and routes weak or fallback captures to human review.
+- Posts and updates GitHub PR comments when a decision needs review or is later approved, rejected, or reopened.
 - Supports GitHub OAuth, role-based review permissions, reviewer identity, and a persistent decision audit trail.
 - Provides a dashboard for search, detail review, and pending approval.
 
@@ -28,9 +28,9 @@ flowchart LR
   Score -->|Low| Ignore["Ignore noise"]
   Score -->|High| Queue["BullMQ queue"]
   Queue --> AI["AIProvider: Ollama or structured fallback"]
-  AI --> Confidence["Confidence check"]
-  Confidence -->|High Ollama confidence| Approved["Approved decision"]
-  Confidence -->|Low or fallback| Pending["Pending decision"]
+  AI --> Gate["Evidence and confidence gate"]
+  Gate -->|Evidence-backed, high confidence| Approved["Approved decision"]
+  Gate -->|Missing evidence, low confidence, or fallback| Pending["Pending review"]
   Pending --> Comment["Backend PR review comment"]
   Approved --> DB["PostgreSQL via Prisma"]
   Pending --> DB
@@ -55,6 +55,12 @@ flowchart LR
 
 ![DecisionCapture pending review screen](docs/screenshots/pending.png)
 
+
+### GitHub PR Review Comment
+
+![DecisionCapture GitHub PR review comment](docs/screenshots/github-pr-comment.png)
+
+
 ## Repository Layout
 
 ```text
@@ -70,10 +76,9 @@ decisioncapture/
 
 ## Quick Start With Docker
 
-Docker is the easiest path.
+Docker is the fastest way to run the full local stack.
 
 ```bash
-cd /Users/tausif/Documents/projects/decisioncapture
 cp .env.example .env
 docker compose up -d
 docker compose exec ollama ollama pull llama3.1
@@ -103,12 +108,11 @@ docker compose down -v
 docker compose up -d
 ```
 
-The Docker stack runs `npm run db:push` on startup so the MVP schema stays aligned with the current Prisma model.
+The Docker stack runs `npm run db:push` on startup so the database schema stays aligned with the current Prisma model.
 
 ## Local Development
 
 ```bash
-cd /Users/tausif/Documents/projects/decisioncapture
 cp .env.example .env
 npm install
 npm run db:generate
@@ -164,41 +168,28 @@ Pulling the model is required for real AI extraction. Without it, the backend sa
 
 DecisionCapture only auto-approves when all of these are true: auto-approval is enabled, extraction did not use fallback, the PR contains explicit reasoning evidence, and confidence is at or above `AUTO_APPROVE_CONFIDENCE`. Missing rationale, fallback extraction, or low confidence always stays pending for review.
 
+<!--
 ### Using Local Ollama From Render
 
-When the backend runs on Render, `OLLAMA_BASE_URL=http://localhost:11434` points at the Render container, not your laptop. Use a public tunnel to a small local proxy instead of tunneling Ollama directly:
-
-```bash
-npm run ollama:proxy
-ngrok http 11435
-```
-
-Or start both processes together:
+For demo deployments that need to reach a local Ollama instance from a hosted backend, run a local proxy and tunnel it:
 
 ```bash
 npm run ollama:tunnel
 ```
 
-Then set Render:
-
-```env
-AI_PROVIDER=ollama
-USE_HEURISTIC_AI_FALLBACK=true
-OLLAMA_BASE_URL=https://your-ngrok-domain.ngrok-free.dev
-OLLAMA_MODEL=llama3.1
-OLLAMA_REQUEST_TIMEOUT_MS=120000
-```
-
-Restart or redeploy the Render service after changing environment variables. Verify what the deployed backend can see:
+Then set the deployed backend's `OLLAMA_BASE_URL` to the active tunnel URL and verify with:
 
 ```bash
-curl https://your-render-service.onrender.com/health/ai
+curl https://your-backend.example.com/health/ai
 ```
 
-The response should show `"reachable": true` and `"modelAvailable": true`. If it shows `pointsAtLocalhost: true` in production, Render is still configured with a local-only Ollama URL. If it shows an HTTP error from ngrok or Ollama, check that the proxy is running and that the ngrok URL in Render is the current one.
+The response should show `"reachable": true` and `"modelAvailable": true`.
+-->
 
 ## API
 
+- `GET /health` returns backend health.
+- `GET /health/ai` checks whether the configured Ollama endpoint and model are reachable.
 - `POST /github/webhook` receives GitHub `pull_request.closed` events and only analyzes merged PRs.
 - `POST /decisions/analyze` accepts full PR context from the GitHub Action or manual ingestion and normally queues work asynchronously. Add `?wait=true` only for manual debugging when you want the processed result immediately.
 - `GET /decisions` searches decisions by keyword, status, repository, category, and sort.
@@ -237,7 +228,7 @@ Configure repository secrets:
 Configure backend environment variables for GitHub-owned enrichment and PR feedback:
 
 - Preferred: `GITHUB_APP_ID`, `GITHUB_APP_INSTALLATION_ID`, and `GITHUB_APP_PRIVATE_KEY`. DecisionCapture creates short-lived installation tokens and comments appear under the GitHub App bot identity.
-- MVP fallback: `GITHUB_API_TOKEN`, a PAT with access to the repositories you want to analyze. Comments appear as the PAT owner.
+- Fallback: `GITHUB_API_TOKEN`, a PAT with access to the repositories you want to analyze. Comments appear as the PAT owner.
 - `APP_BASE_URL`, the public dashboard URL used in PR review links
 
 For the GitHub App, grant repository metadata read access and pull requests read/write access, then install it on the repositories DecisionCapture should analyze. Keep OAuth App credentials for human dashboard sign-in separate from GitHub App credentials for backend automation.
@@ -311,6 +302,7 @@ Recommended end-to-end verification is a merged GitHub PR through `.github/workf
 
 For webhook-only verification, also set `GITHUB_WEBHOOK_SECRET` and `GITHUB_API_TOKEN` on the backend, point a GitHub webhook at `POST /github/webhook`, merge a PR, and confirm the stored decision includes real files, commits, reviewers, approvals, and diff-derived context.
 
+<!--
 ## Future Memory Store MCP Integration
 
 DecisionCapture is standalone today. A future integration can export approved decision memories into Memory Store MCP:
@@ -320,3 +312,4 @@ DecisionCapture -> Memory Store MCP -> Company Memory
 ```
 
 That integration should be an optional output adapter. The core MVP does not depend on Memory Store APIs.
+-->
