@@ -11,7 +11,7 @@ vi.mock("../src/config/env.js", () => ({
 import { oauthStateCookie, sessionCookie } from "../src/modules/auth/cookies.js";
 
 describe("auth cookies", () => {
-  it("uses cross-site-safe cookies in production for Vercel to Render auth", () => {
+  it("uses secure browser cookies in production auth", () => {
     expect(sessionCookie("session-token")).toContain("SameSite=None");
     expect(sessionCookie("session-token")).toContain("Secure");
     expect(oauthStateCookie("state-token")).toContain("SameSite=None");

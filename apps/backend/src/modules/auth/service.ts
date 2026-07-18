@@ -113,6 +113,10 @@ export function githubAuthorizeUrl(state: string) {
     state
   });
 
+  if (env.GITHUB_OAUTH_CALLBACK_URL) {
+    params.set("redirect_uri", env.GITHUB_OAUTH_CALLBACK_URL);
+  }
+
   return `https://github.com/login/oauth/authorize?${params.toString()}`;
 }
 

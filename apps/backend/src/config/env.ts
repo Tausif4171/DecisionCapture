@@ -32,6 +32,7 @@ const envSchema = z
     AUTH_GITHUB_PUBLIC_VIEWERS: booleanFromString,
     GITHUB_CLIENT_ID: optionalNonEmptyString,
     GITHUB_CLIENT_SECRET: optionalNonEmptyString,
+    GITHUB_OAUTH_CALLBACK_URL: optionalNonEmptyString,
     GITHUB_WEBHOOK_SECRET: optionalNonEmptyString,
     GITHUB_API_TOKEN: optionalNonEmptyString,
     GITHUB_APP_ID: optionalNonEmptyString,

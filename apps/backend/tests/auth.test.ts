@@ -11,6 +11,7 @@ const envMock = vi.hoisted(() => ({
   AUTH_GITHUB_PUBLIC_VIEWERS: false,
   GITHUB_CLIENT_ID: "client-id",
   GITHUB_CLIENT_SECRET: "client-secret",
+  GITHUB_OAUTH_CALLBACK_URL: undefined as string | undefined,
   FRONTEND_ORIGIN: "http://localhost:3088/",
   APP_BASE_URL: "http://localhost:3088/"
 }));
@@ -33,6 +34,7 @@ vi.mock("../src/modules/database/prisma.js", () => ({
 
 import {
   frontendOAuthErrorUrl,
+  githubAuthorizeUrl,
   safeReturnTo,
   upsertGitHubUser,
   userFromSessionToken
@@ -69,6 +71,7 @@ describe("GitHub dashboard auth", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     envMock.AUTH_GITHUB_PUBLIC_VIEWERS = false;
+    envMock.GITHUB_OAUTH_CALLBACK_URL = undefined;
   });
 
   it("accepts signed sessions and rejects tampered tokens", () => {
@@ -98,6 +101,16 @@ describe("GitHub dashboard auth", () => {
     expect(url.pathname).toBe("/auth/error");
     expect(url.searchParams.get("reason")).toBe("account-not-allowed");
     expect(url.searchParams.get("returnTo")).toBe("/");
+  });
+
+  it("can send GitHub OAuth through a frontend proxy callback", () => {
+    envMock.GITHUB_OAUTH_CALLBACK_URL = "https://decision-capture.vercel.app/api/auth/github/callback";
+
+    const url = new URL(githubAuthorizeUrl("signed-state"));
+
+    expect(url.searchParams.get("redirect_uri")).toBe(
+      "https://decision-capture.vercel.app/api/auth/github/callback"
+    );
   });
 
   it("requires an authenticated GitHub user for protected dashboard requests", () => {

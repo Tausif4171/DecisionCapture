@@ -144,6 +144,7 @@ For non-Docker development, provide PostgreSQL and Redis matching `.env.example`
 | `AUTH_GITHUB_PUBLIC_VIEWERS` | When true, any GitHub account can sign in as `VIEWER`; useful for public portfolio/demo deployments. |
 | `GITHUB_CLIENT_ID` | GitHub OAuth App client ID for dashboard sign-in. |
 | `GITHUB_CLIENT_SECRET` | GitHub OAuth App client secret for dashboard sign-in. |
+| `GITHUB_OAUTH_CALLBACK_URL` | Optional explicit OAuth callback URL sent to GitHub. Use the frontend `/api/auth/github/callback` URL when proxying the backend through Vercel. |
 | `GITHUB_WEBHOOK_SECRET` | HMAC secret for GitHub webhook signature verification. Replace the sample value before real webhook use. |
 | `GITHUB_API_TOKEN` | GitHub PAT or GitHub App installation token used to enrich webhook payloads and post or update PR review comments. |
 | `GITHUB_APP_ID` | Preferred GitHub App ID for short-lived bot authentication. Configure with installation ID and private key. |
@@ -157,7 +158,8 @@ For non-Docker development, provide PostgreSQL and Redis matching `.env.example`
 | `USE_HEURISTIC_AI_FALLBACK` | Parses explicit Decision/Reason/Alternative/Impact PR sections if Ollama is unavailable. Fallback records always require review. |
 | `AUTO_APPROVAL_ENABLED` | Set to `false` when you want every captured memory to stay pending during a human-review rollout. |
 | `AUTO_APPROVE_CONFIDENCE` | Minimum confidence for auto-approval. Auto-approval still requires explicit reasoning evidence in the PR description or discussion. |
-| `NEXT_PUBLIC_API_URL` | Browser-facing backend URL for the frontend. |
+| `NEXT_PUBLIC_API_URL` | Browser-facing API base URL for the frontend. Use `/api` on Vercel so auth cookies stay same-origin. |
+| `API_INTERNAL_URL` | Server-side backend URL used by the frontend rewrite from `/api/*` to the backend. |
 
 To use a real Ollama model in Docker:
 
@@ -248,7 +250,26 @@ Local/demo mode remains open by default:
 AUTH_MODE=disabled
 ```
 
-For a protected dashboard, create a GitHub OAuth App and set its callback URL to the public backend URL plus `/auth/github/callback`. For local testing, use:
+For a protected dashboard, create a GitHub OAuth App. In hosted Vercel + Render deployments, route browser traffic through the Vercel origin so auth cookies stay first-party:
+
+```env
+# Vercel
+NEXT_PUBLIC_API_URL=/api
+API_INTERNAL_URL=https://your-backend.onrender.com
+
+# Render backend
+APP_BASE_URL=https://your-frontend.vercel.app
+FRONTEND_ORIGIN=https://your-frontend.vercel.app
+GITHUB_OAUTH_CALLBACK_URL=https://your-frontend.vercel.app/api/auth/github/callback
+```
+
+Set the GitHub OAuth App callback URL to:
+
+```text
+https://your-frontend.vercel.app/api/auth/github/callback
+```
+
+For local testing without the proxy, use:
 
 ```text
 http://localhost:4000/auth/github/callback
@@ -261,6 +282,7 @@ AUTH_MODE=github
 AUTH_SESSION_SECRET=replace-with-at-least-32-random-characters
 GITHUB_CLIENT_ID=your-oauth-client-id
 GITHUB_CLIENT_SECRET=your-oauth-client-secret
+GITHUB_OAUTH_CALLBACK_URL=https://your-frontend.vercel.app/api/auth/github/callback
 AUTH_ALLOWED_LOGINS=
 AUTH_ADMIN_LOGINS=Tausif4171
 AUTH_MAINTAINER_LOGINS=
