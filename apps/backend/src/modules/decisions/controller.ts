@@ -39,7 +39,7 @@ export async function analyzeDecision(request: Request, response: Response) {
 
 export async function listDecisions(request: Request, response: Response) {
   const query = decisionSearchSchema.parse(request.query);
-  const result = await decisionService.listDecisions(query);
+  const result = await decisionService.listDecisions(query, reviewActor(request));
   return response.json(result);
 }
 

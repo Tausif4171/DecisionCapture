@@ -277,7 +277,10 @@ export class DecisionService {
     };
   }
 
-  async listDecisions(options: DecisionSearchOptions): Promise<DecisionListResponse> {
+  async listDecisions(
+    options: DecisionSearchOptions,
+    actor?: ReviewActor
+  ): Promise<DecisionListResponse> {
     const and: Prisma.DecisionMemoryWhereInput[] = [];
 
     if (options.status) {
@@ -314,6 +317,10 @@ export class DecisionService {
           ? { createdAt: "asc" }
           : { createdAt: "desc" };
 
+    const needsParticipantContext = Boolean(
+      actor?.authRequired && actor.user && !privilegedRoles.includes(actor.user.role)
+    );
+
     const [decisions, total] = await Promise.all([
       prisma.decisionMemory.findMany({
         where,
@@ -324,14 +331,24 @@ export class DecisionService {
           auditLogs: {
             orderBy: { createdAt: "desc" },
             take: 1
-          }
+          },
+          prRecord: needsParticipantContext
+            ? {
+                select: { sourcePayload: true }
+              }
+            : false
         }
       }),
       prisma.decisionMemory.count({ where })
     ]);
 
     return {
-      decisions: decisions.map((decision) => toDecisionMemory(decision)),
+      decisions: decisions.map((decision) =>
+        toDecisionMemory(
+          decision,
+          actor ? this.reviewPermissions(decision, actor) : undefined
+        )
+      ),
       total
     };
   }

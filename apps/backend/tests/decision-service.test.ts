@@ -9,6 +9,8 @@ const mockPrisma = vi.hoisted(() => ({
   decisionMemory: {
     findUnique: vi.fn(),
     findFirst: vi.fn(),
+    findMany: vi.fn(),
+    count: vi.fn(),
     create: vi.fn(),
     update: vi.fn()
   },
@@ -615,6 +617,53 @@ describe("DecisionService", () => {
     expect(result?.reviewPermissions).toEqual({
       canReview: false,
       canReopen: false
+    });
+  });
+
+  it("returns per-decision review permissions in decision lists", async () => {
+    const service = new DecisionService({
+      extractDecision: vi.fn()
+    });
+    const decision = buildReviewableDecisionRecord({ id: "decision-list-viewer" });
+
+    mockPrisma.decisionMemory.findMany.mockResolvedValue([decision]);
+    mockPrisma.decisionMemory.count.mockResolvedValue(1);
+
+    const result = await service.listDecisions(
+      { status: "PENDING" },
+      {
+        authRequired: true,
+        user: {
+          id: "user-outsider",
+          githubId: "808",
+          login: "outsider",
+          name: null,
+          avatarUrl: null,
+          role: "VIEWER"
+        }
+      }
+    );
+
+    expect(mockPrisma.decisionMemory.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        include: expect.objectContaining({
+          prRecord: {
+            select: { sourcePayload: true }
+          }
+        })
+      })
+    );
+    expect(result).toMatchObject({
+      total: 1,
+      decisions: [
+        {
+          id: "decision-list-viewer",
+          reviewPermissions: {
+            canReview: false,
+            canReopen: false
+          }
+        }
+      ]
     });
   });
 
