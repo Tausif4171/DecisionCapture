@@ -49,7 +49,7 @@ export async function decisionStats(_request: Request, response: Response) {
 }
 
 export async function getDecision(request: Request, response: Response) {
-  const decision = await decisionService.getDecision(decisionId(request));
+  const decision = await decisionService.getDecision(decisionId(request), reviewActor(request));
 
   if (!decision) {
     throw new HttpError(404, "Decision not found");

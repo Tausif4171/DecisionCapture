@@ -100,10 +100,8 @@ export default function DecisionDetailPage() {
   const decision = decisionQuery.data;
   const formValue = draft ?? (decision ? toDecisionReviewDraft(decision) : null);
   const isPendingDecision = decision?.status === "PENDING";
-  const canReopen =
-    authQuery.data?.authMode === "disabled" ||
-    authQuery.data?.user?.role === "ADMIN" ||
-    authQuery.data?.user?.role === "MAINTAINER";
+  const canReviewPendingDecision = Boolean(decision?.reviewPermissions?.canReview);
+  const canReopen = Boolean(decision?.reviewPermissions?.canReopen);
   const isDirty = decision && formValue ? hasDecisionReviewChanges(decision, formValue) : false;
   const hasRequiredFields = formValue ? hasRequiredDecisionReviewFields(formValue) : false;
   const readOnlyMessage =
@@ -233,7 +231,7 @@ export default function DecisionDetailPage() {
             )}
           </div>
           <div className="flex flex-wrap gap-2">
-            {isPendingDecision ? (
+            {isPendingDecision && canReviewPendingDecision ? (
               <button
                 type="button"
                 onClick={isEditing ? cancelEditing : startEditing}
@@ -244,7 +242,7 @@ export default function DecisionDetailPage() {
                 {isEditing ? "Cancel" : "Edit"}
               </button>
             ) : null}
-            {isEditing && isPendingDecision ? (
+            {isEditing && isPendingDecision && canReviewPendingDecision ? (
               <button
                 type="button"
                 onClick={() => updateMutation.mutate()}
@@ -256,7 +254,7 @@ export default function DecisionDetailPage() {
                 Save draft
               </button>
             ) : null}
-            {isPendingDecision ? (
+            {isPendingDecision && canReviewPendingDecision ? (
               <>
                 <button
                   type="button"
@@ -299,6 +297,11 @@ export default function DecisionDetailPage() {
         ) : isPendingDecision && updateMutation.isSuccess ? (
           <p className="mt-3 text-sm text-neutral-500">
             Draft saved. This decision remains pending until you approve or reject it.
+          </p>
+        ) : isPendingDecision && authQuery.data && !canReviewPendingDecision ? (
+          <p className="mt-3 text-sm text-neutral-500">
+            Viewer access can inspect pending decisions. Review actions are limited to configured reviewers and PR
+            participants.
           </p>
         ) : !isPendingDecision ? (
           <p className="mt-3 text-sm text-neutral-500">{readOnlyMessage}</p>

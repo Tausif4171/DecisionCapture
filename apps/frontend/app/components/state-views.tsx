@@ -1,4 +1,8 @@
-import { AlertCircle, Inbox, Loader2 } from "lucide-react";
+"use client";
+
+import { AlertCircle, ArrowRight, Github, Inbox, Loader2, ShieldCheck } from "lucide-react";
+import { usePathname } from "next/navigation";
+import { authLoginUrl } from "../../lib/api";
 
 export function LoadingState({ label = "Loading" }: { label?: string }) {
   return (
@@ -12,10 +16,45 @@ export function LoadingState({ label = "Loading" }: { label?: string }) {
 }
 
 export function ErrorState({ message }: { message: string }) {
+  const pathname = usePathname();
+  const isAuthRequired = message.toLowerCase().includes("github sign-in is required");
+
+  if (isAuthRequired) {
+    return (
+      <div className="flex min-h-[22rem] items-center justify-center rounded-md border border-neutral-200 bg-white px-6 py-12 text-center shadow-sm">
+        <div className="max-w-lg">
+          <div className="mx-auto mb-5 flex size-12 items-center justify-center rounded-md bg-neutral-950 text-white">
+            <ShieldCheck className="size-6" aria-hidden="true" />
+          </div>
+          <p className="text-lg font-semibold text-neutral-950">Sign in to view DecisionCapture</p>
+          <p className="mt-2 text-sm leading-6 text-neutral-600">
+            Dashboard data is protected by GitHub OAuth. Sign in to explore captured engineering
+            decisions.
+          </p>
+          <div className="mt-6 flex justify-center">
+            <a
+              href={authLoginUrl(pathname)}
+              className="inline-flex min-h-10 items-center gap-2 rounded-md bg-neutral-950 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-neutral-800"
+            >
+              <Github className="size-4" aria-hidden="true" />
+              Sign in with GitHub
+              <ArrowRight className="size-4" aria-hidden="true" />
+            </a>
+          </div>
+          <p className="mt-4 text-xs text-neutral-500">
+            Review actions remain limited by role and PR participation.
+          </p>
+        </div>
+      </div>
+    );
+  }
+
   return (
-    <div className="flex min-h-48 items-center justify-center rounded-md border border-red-200 bg-red-50 px-4 text-center">
+    <div className="flex min-h-48 items-center justify-center rounded-md border border-red-200 bg-white px-4 text-center shadow-sm">
       <div className="max-w-md">
-        <AlertCircle className="mx-auto mb-3 size-5 text-red-600" aria-hidden="true" />
+        <div className="mx-auto mb-3 flex size-9 items-center justify-center rounded-md bg-red-50 text-red-600">
+          <AlertCircle className="size-5" aria-hidden="true" />
+        </div>
         <p className="text-sm font-semibold text-red-900">Unable to load data</p>
         <p className="mt-1 text-sm text-red-700">{message}</p>
       </div>

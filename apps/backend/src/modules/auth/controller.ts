@@ -1,4 +1,5 @@
 import type { Request, Response } from "express";
+import { logger } from "../../config/logger.js";
 import { HttpError } from "../../middleware/error.js";
 import {
   clearCookie,
@@ -11,6 +12,7 @@ import {
   authStatus,
   exchangeGitHubCode,
   fetchGitHubOAuthUser,
+  frontendOAuthErrorUrl,
   frontendRedirectUrl,
   githubAuthorizeUrl,
   isAuthEnabled,
@@ -40,28 +42,42 @@ export async function githubCallback(request: Request, response: Response) {
     throw new HttpError(404, "GitHub authentication is not enabled");
   }
 
+  const redirectToOAuthError = (reason: "account-not-allowed" | "invalid-state" | "oauth-failed", returnTo = "/") => {
+    response.setHeader("set-cookie", clearCookie(oauthStateCookieName));
+    return response.redirect(frontendOAuthErrorUrl(reason, returnTo));
+  };
+
   const code = typeof request.query.code === "string" ? request.query.code : undefined;
   const state = typeof request.query.state === "string" ? request.query.state : undefined;
 
   if (!code || !state) {
-    throw new HttpError(400, "Invalid GitHub OAuth callback state");
+    return redirectToOAuthError("invalid-state");
   }
 
   const verifiedState = verifyOAuthState(state);
   if (!verifiedState) {
-    throw new HttpError(400, "Invalid GitHub OAuth callback state");
+    return redirectToOAuthError("invalid-state");
   }
 
-  const accessToken = await exchangeGitHubCode(code);
-  const githubUser = await fetchGitHubOAuthUser(accessToken);
-  const user = await upsertGitHubUser(githubUser);
-  const sessionToken = createSessionToken(user.id);
+  try {
+    const accessToken = await exchangeGitHubCode(code);
+    const githubUser = await fetchGitHubOAuthUser(accessToken);
+    const user = await upsertGitHubUser(githubUser);
+    const sessionToken = createSessionToken(user.id);
 
-  response.setHeader("set-cookie", [
-    sessionCookie(sessionToken),
-    clearCookie(oauthStateCookieName)
-  ]);
-  return response.redirect(frontendRedirectUrl(verifiedState.returnTo));
+    response.setHeader("set-cookie", [
+      sessionCookie(sessionToken),
+      clearCookie(oauthStateCookieName)
+    ]);
+    return response.redirect(frontendRedirectUrl(verifiedState.returnTo));
+  } catch (error) {
+    if (error instanceof HttpError && error.statusCode === 403) {
+      return redirectToOAuthError("account-not-allowed", verifiedState.returnTo);
+    }
+
+    logger.warn({ error }, "GitHub OAuth callback failed");
+    return redirectToOAuthError("oauth-failed", verifiedState.returnTo);
+  }
 }
 
 export async function logout(_request: Request, response: Response) {

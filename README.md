@@ -141,6 +141,7 @@ For non-Docker development, provide PostgreSQL and Redis matching `.env.example`
 | `AUTH_ADMIN_LOGINS` | Comma-separated GitHub logins that receive the `ADMIN` role. |
 | `AUTH_MAINTAINER_LOGINS` | Comma-separated GitHub logins that receive the `MAINTAINER` role. |
 | `AUTH_REVIEWER_LOGINS` | Comma-separated GitHub logins that receive the `REVIEWER` role. |
+| `AUTH_GITHUB_PUBLIC_VIEWERS` | When true, any GitHub account can sign in as `VIEWER`; useful for public portfolio/demo deployments. |
 | `GITHUB_CLIENT_ID` | GitHub OAuth App client ID for dashboard sign-in. |
 | `GITHUB_CLIENT_SECRET` | GitHub OAuth App client secret for dashboard sign-in. |
 | `GITHUB_WEBHOOK_SECRET` | HMAC secret for GitHub webhook signature verification. Replace the sample value before real webhook use. |
@@ -264,13 +265,23 @@ AUTH_ALLOWED_LOGINS=
 AUTH_ADMIN_LOGINS=Tausif4171
 AUTH_MAINTAINER_LOGINS=
 AUTH_REVIEWER_LOGINS=
+AUTH_GITHUB_PUBLIC_VIEWERS=false
 ```
 
 Generate a session secret with `openssl rand -hex 32`. Restart or rebuild the backend after changing these values.
 
+For a public portfolio/demo deployment where visitors should be able to sign in without manual allowlisting, set:
+
+```env
+AUTH_GITHUB_PUBLIC_VIEWERS=true
+```
+
+Unknown GitHub accounts are created as `VIEWER`. Keep your own login in `AUTH_ADMIN_LOGINS` so you can review, approve, reject, and reopen records.
+
 Review permissions are enforced by the backend:
 
-- Only GitHub logins present in `AUTH_ALLOWED_LOGINS` or one of the role lists can sign in.
+- By default, only GitHub logins present in `AUTH_ALLOWED_LOGINS` or one of the role lists can sign in.
+- With `AUTH_GITHUB_PUBLIC_VIEWERS=true`, other GitHub accounts can sign in as `VIEWER`.
 - `ADMIN`, `MAINTAINER`, and `REVIEWER` users can edit, approve, or reject any pending decision.
 - Only `ADMIN` and `MAINTAINER` users can reopen an approved or rejected decision; reopening requires a reason and returns the record to pending review.
 - A `VIEWER` can review a decision only when their GitHub login matches the PR author, a requested/reported reviewer, or an approver captured from the PR.

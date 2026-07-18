@@ -29,6 +29,7 @@ const envSchema = z
     AUTH_ADMIN_LOGINS: z.string().optional().default(""),
     AUTH_MAINTAINER_LOGINS: z.string().optional().default(""),
     AUTH_REVIEWER_LOGINS: z.string().optional().default(""),
+    AUTH_GITHUB_PUBLIC_VIEWERS: booleanFromString,
     GITHUB_CLIENT_ID: optionalNonEmptyString,
     GITHUB_CLIENT_SECRET: optionalNonEmptyString,
     GITHUB_WEBHOOK_SECRET: optionalNonEmptyString,
@@ -82,11 +83,12 @@ const envSchema = z
       values.AUTH_REVIEWER_LOGINS
     ].some((value) => value.split(",").some((login) => login.trim().length > 0));
 
-    if (!allowedLoginConfig) {
+    if (!allowedLoginConfig && !values.AUTH_GITHUB_PUBLIC_VIEWERS) {
       context.addIssue({
         code: "custom",
         path: ["AUTH_ALLOWED_LOGINS"],
-        message: "At least one allowed or role-assigned GitHub login is required when AUTH_MODE=github"
+        message:
+          "At least one allowed or role-assigned GitHub login is required when AUTH_MODE=github unless AUTH_GITHUB_PUBLIC_VIEWERS=true"
       });
     }
   })

@@ -17,6 +17,8 @@ type GitHubOAuthUser = {
   avatar_url?: string | null;
 };
 
+export type OAuthErrorReason = "account-not-allowed" | "invalid-state" | "oauth-failed";
+
 function toAuthUser(user: {
   id: string;
   githubId: string;
@@ -78,6 +80,10 @@ function roleForLogin(login: string): AuthUser["role"] {
 }
 
 function isLoginAllowed(login: string) {
+  if (env.AUTH_GITHUB_PUBLIC_VIEWERS) {
+    return true;
+  }
+
   const normalizedLogin = login.toLowerCase();
   return [
     env.AUTH_ALLOWED_LOGINS,
@@ -138,6 +144,13 @@ export function frontendRedirectUrl(returnTo: string) {
   const origin = normalizeOrigin(env.APP_BASE_URL ?? env.FRONTEND_ORIGIN.split(",")[0] ?? "http://localhost:3000");
 
   return `${origin}${safeReturnTo(returnTo)}`;
+}
+
+export function frontendOAuthErrorUrl(reason: OAuthErrorReason, returnTo = "/") {
+  const url = new URL("/auth/error", frontendRedirectUrl("/"));
+  url.searchParams.set("reason", reason);
+  url.searchParams.set("returnTo", safeReturnTo(returnTo));
+  return url.toString();
 }
 
 export async function exchangeGitHubCode(code: string) {

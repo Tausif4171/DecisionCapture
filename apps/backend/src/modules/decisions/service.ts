@@ -28,6 +28,9 @@ type DecisionMemoryRecordWithLatestAudit = DecisionMemoryRecord & {
     action: DecisionAuditAction;
     createdAt: Date;
   }>;
+  prRecord?: {
+    sourcePayload: Prisma.JsonValue | null;
+  } | null;
 };
 
 function reviewReasonForDecision(decision: {
@@ -65,12 +68,32 @@ function reviewReasonForDecision(decision: {
   return "LOW_CONFIDENCE";
 }
 
-function toDecisionMemory(decision: DecisionMemoryRecordWithLatestAudit): DecisionMemory {
+function toDecisionMemory(
+  decision: DecisionMemoryRecordWithLatestAudit,
+  reviewPermissions?: DecisionMemory["reviewPermissions"]
+): DecisionMemory {
   return {
-    ...decision,
+    id: decision.id,
+    decision: decision.decision,
+    reason: decision.reason,
+    alternative: decision.alternative,
+    impact: decision.impact,
+    author: decision.author,
+    sourcePR: decision.sourcePR,
+    repository: decision.repository,
+    filesChanged: decision.filesChanged,
+    confidence: decision.confidence,
+    status: decision.status,
+    category: decision.category,
+    extractionMethod: decision.extractionMethod,
     reviewReason: reviewReasonForDecision(decision),
+    prRecordId: decision.prRecordId,
+    approvedByLogin: decision.approvedByLogin,
     approvedAt: decision.approvedAt?.toISOString() ?? null,
+    rejectedByLogin: decision.rejectedByLogin,
     rejectedAt: decision.rejectedAt?.toISOString() ?? null,
+    lastEditedByLogin: decision.lastEditedByLogin,
+    reviewPermissions,
     createdAt: decision.createdAt.toISOString(),
     updatedAt: decision.updatedAt.toISOString()
   };
@@ -308,22 +331,23 @@ export class DecisionService {
     ]);
 
     return {
-      decisions: decisions.map(toDecisionMemory),
+      decisions: decisions.map((decision) => toDecisionMemory(decision)),
       total
     };
   }
 
-  async getDecision(id: string): Promise<DecisionMemory | null> {
+  async getDecision(id: string, actor?: ReviewActor): Promise<DecisionMemory | null> {
     const decision = await prisma.decisionMemory.findUnique({
       where: { id },
       include: {
+        prRecord: true,
         auditLogs: {
           orderBy: { createdAt: "desc" },
           take: 1
         }
       }
     });
-    return decision ? toDecisionMemory(decision) : null;
+    return decision ? toDecisionMemory(decision, actor ? this.reviewPermissions(decision, actor) : undefined) : null;
   }
 
   async listAuditLogs(id: string): Promise<DecisionAuditEntry[]> {
@@ -354,6 +378,63 @@ export class DecisionService {
     return parsed.success ? parsed.data : null;
   }
 
+  private canReviewDecision(
+    decision: DecisionMemoryRecord & {
+      prRecord?: {
+        sourcePayload: Prisma.JsonValue | null;
+      } | null;
+    },
+    actor: ReviewActor
+  ) {
+    if (!actor.authRequired) {
+      return true;
+    }
+
+    if (!actor.user) {
+      return false;
+    }
+
+    if (privilegedRoles.includes(actor.user.role)) {
+      return true;
+    }
+
+    const context = this.contextFromDecision(decision);
+    const allowedLogins = new Set(
+      [
+        decision.author,
+        context?.author,
+        ...(context?.reviewers ?? []),
+        ...(context?.approvals ?? [])
+      ]
+        .map(normalizeLogin)
+        .filter(Boolean)
+    );
+
+    return allowedLogins.has(normalizeLogin(actor.user.login));
+  }
+
+  private canReopenDecision(actor: ReviewActor) {
+    if (!actor.authRequired) {
+      return true;
+    }
+
+    return Boolean(actor.user && reopenRoles.includes(actor.user.role));
+  }
+
+  private reviewPermissions(
+    decision: DecisionMemoryRecord & {
+      prRecord?: {
+        sourcePayload: Prisma.JsonValue | null;
+      } | null;
+    },
+    actor: ReviewActor
+  ): DecisionMemory["reviewPermissions"] {
+    return {
+      canReview: this.canReviewDecision(decision, actor),
+      canReopen: this.canReopenDecision(actor)
+    };
+  }
+
   private ensureCanReview(
     decision: DecisionMemoryRecord & {
       prRecord?: {
@@ -370,23 +451,7 @@ export class DecisionService {
       throw new HttpError(401, "GitHub sign-in is required to review decisions");
     }
 
-    if (privilegedRoles.includes(actor.user.role)) {
-      return;
-    }
-
-    const context = this.contextFromDecision(decision);
-    const allowedLogins = new Set(
-      [
-        decision.author,
-        context?.author,
-        ...(context?.reviewers ?? []),
-        ...(context?.approvals ?? [])
-      ]
-        .map(normalizeLogin)
-        .filter(Boolean)
-    );
-
-    if (!allowedLogins.has(normalizeLogin(actor.user.login))) {
+    if (!this.canReviewDecision(decision, actor)) {
       throw new HttpError(
         403,
         "Only the PR author, reviewer, approver, or a DecisionCapture reviewer can review this decision"
@@ -427,7 +492,7 @@ export class DecisionService {
       throw new HttpError(401, "GitHub sign-in is required to reopen decisions");
     }
 
-    if (!reopenRoles.includes(actor.user.role)) {
+    if (!this.canReopenDecision(actor)) {
       throw new HttpError(403, "Only an admin or maintainer can reopen a completed review");
     }
   }
@@ -663,7 +728,7 @@ export class DecisionService {
         category: item.category,
         count: item._count.category
       })),
-      recentDecisions: recentDecisions.map(toDecisionMemory)
+      recentDecisions: recentDecisions.map((decision) => toDecisionMemory(decision))
     };
   }
 }

@@ -1,4 +1,4 @@
-import type { Request } from "express";
+import type { Request, Response } from "express";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const envMock = vi.hoisted(() => ({
@@ -8,6 +8,7 @@ const envMock = vi.hoisted(() => ({
   AUTH_ADMIN_LOGINS: "Tausif4171",
   AUTH_MAINTAINER_LOGINS: "platform-maintainer",
   AUTH_REVIEWER_LOGINS: "platform-reviewer",
+  AUTH_GITHUB_PUBLIC_VIEWERS: false,
   GITHUB_CLIENT_ID: "client-id",
   GITHUB_CLIENT_SECRET: "client-secret",
   FRONTEND_ORIGIN: "http://localhost:3088/",
@@ -30,8 +31,14 @@ vi.mock("../src/modules/database/prisma.js", () => ({
   prisma: prismaMock
 }));
 
-import { safeReturnTo, upsertGitHubUser, userFromSessionToken } from "../src/modules/auth/service.js";
+import {
+  frontendOAuthErrorUrl,
+  safeReturnTo,
+  upsertGitHubUser,
+  userFromSessionToken
+} from "../src/modules/auth/service.js";
 import { requireCurrentUser } from "../src/modules/auth/middleware.js";
+import { githubCallback } from "../src/modules/auth/controller.js";
 import {
   createOAuthState,
   createSessionToken,
@@ -39,9 +46,29 @@ import {
   verifySessionToken
 } from "../src/modules/auth/token.js";
 
+type MockResponse = Response & {
+  headers: Record<string, number | string | string[]>;
+  redirectUrl?: string;
+};
+
+function createMockResponse(): MockResponse {
+  return {
+    headers: {},
+    setHeader(name: string, value: number | string | string[]) {
+      this.headers[name.toLowerCase()] = value;
+      return this;
+    },
+    redirect(url: string) {
+      this.redirectUrl = url;
+      return this;
+    }
+  } as MockResponse;
+}
+
 describe("GitHub dashboard auth", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    envMock.AUTH_GITHUB_PUBLIC_VIEWERS = false;
   });
 
   it("accepts signed sessions and rejects tampered tokens", () => {
@@ -62,6 +89,15 @@ describe("GitHub dashboard auth", () => {
     expect(safeReturnTo("/pending?status=open")).toBe("/pending?status=open");
     expect(safeReturnTo("http://localhost:3088/decisions/123")).toBe("/decisions/123");
     expect(safeReturnTo("https://attacker.example/steal-session")).toBe("/");
+  });
+
+  it("builds frontend OAuth error redirects without trusting external return targets", () => {
+    const url = new URL(frontendOAuthErrorUrl("account-not-allowed", "https://attacker.example/steal-session"));
+
+    expect(url.origin).toBe("http://localhost:3088");
+    expect(url.pathname).toBe("/auth/error");
+    expect(url.searchParams.get("reason")).toBe("account-not-allowed");
+    expect(url.searchParams.get("returnTo")).toBe("/");
   });
 
   it("requires an authenticated GitHub user for protected dashboard requests", () => {
@@ -106,6 +142,63 @@ describe("GitHub dashboard auth", () => {
       statusCode: 403
     });
 
+    expect(prismaMock.appUser.upsert).not.toHaveBeenCalled();
+  });
+
+  it("can allow unknown GitHub accounts as public viewers for demo deployments", async () => {
+    envMock.AUTH_GITHUB_PUBLIC_VIEWERS = true;
+    prismaMock.appUser.upsert.mockResolvedValue({
+      id: "user-public",
+      githubId: "999",
+      login: "external-founder",
+      name: null,
+      avatarUrl: null,
+      role: "VIEWER"
+    });
+
+    const user = await upsertGitHubUser({
+      id: 999,
+      login: "external-founder",
+      name: null,
+      avatar_url: null
+    });
+
+    expect(prismaMock.appUser.upsert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        create: expect.objectContaining({ role: "VIEWER" }),
+        update: expect.objectContaining({ role: "VIEWER" })
+      })
+    );
+    expect(user.role).toBe("VIEWER");
+  });
+
+  it("redirects disallowed OAuth callback accounts to the frontend error page", async () => {
+    const state = createOAuthState("/pending");
+    const response = createMockResponse();
+    global.fetch = vi
+      .fn()
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ access_token: "github-access-token" })
+      } as Response)
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          id: 999,
+          login: "external-user",
+          name: null,
+          avatar_url: null
+        })
+      } as Response);
+
+    await githubCallback({ query: { code: "oauth-code", state } } as unknown as Request, response);
+
+    const redirectUrl = new URL(response.redirectUrl ?? "");
+    expect(redirectUrl.origin).toBe("http://localhost:3088");
+    expect(redirectUrl.pathname).toBe("/auth/error");
+    expect(redirectUrl.searchParams.get("reason")).toBe("account-not-allowed");
+    expect(redirectUrl.searchParams.get("returnTo")).toBe("/pending");
+    expect(response.headers["set-cookie"]).toContain("decisioncapture_oauth_state=");
     expect(prismaMock.appUser.upsert).not.toHaveBeenCalled();
   });
 

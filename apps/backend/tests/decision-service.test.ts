@@ -554,6 +554,70 @@ describe("DecisionService", () => {
     expect(result.lastEditedByLogin).toBe("platform-reviewer");
   });
 
+  it("returns review permissions for captured PR participants", async () => {
+    const service = new DecisionService({
+      extractDecision: vi.fn()
+    });
+
+    mockPrisma.decisionMemory.findUnique.mockResolvedValue(
+      buildReviewableDecisionRecord({ id: "decision-reviewer-permissions" })
+    );
+
+    const result = await service.getDecision("decision-reviewer-permissions", {
+      authRequired: true,
+      user: {
+        id: "user-lee",
+        githubId: "606",
+        login: "lee.dev",
+        name: null,
+        avatarUrl: null,
+        role: "VIEWER"
+      }
+    });
+
+    expect(mockPrisma.decisionMemory.findUnique).toHaveBeenCalledWith(
+      expect.objectContaining({
+        include: expect.objectContaining({ prRecord: true })
+      })
+    );
+    expect(result).toMatchObject({
+      id: "decision-reviewer-permissions",
+      reviewPermissions: {
+        canReview: true,
+        canReopen: false
+      }
+    });
+    expect(result).not.toHaveProperty("prRecord");
+    expect(result).not.toHaveProperty("auditLogs");
+  });
+
+  it("does not grant review permissions to unrelated viewers", async () => {
+    const service = new DecisionService({
+      extractDecision: vi.fn()
+    });
+
+    mockPrisma.decisionMemory.findUnique.mockResolvedValue(
+      buildReviewableDecisionRecord({ id: "decision-viewer-permissions" })
+    );
+
+    const result = await service.getDecision("decision-viewer-permissions", {
+      authRequired: true,
+      user: {
+        id: "user-outsider",
+        githubId: "707",
+        login: "outsider",
+        name: null,
+        avatarUrl: null,
+        role: "VIEWER"
+      }
+    });
+
+    expect(result?.reviewPermissions).toEqual({
+      canReview: false,
+      canReopen: false
+    });
+  });
+
   it("returns the newest decision audit activity first", async () => {
     const service = new DecisionService({
       extractDecision: vi.fn()

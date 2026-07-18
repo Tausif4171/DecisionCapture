@@ -68,6 +68,10 @@ export interface DecisionMemory {
   rejectedByLogin?: string | null;
   rejectedAt?: string | null;
   lastEditedByLogin?: string | null;
+  reviewPermissions?: {
+    canReview: boolean;
+    canReopen: boolean;
+  };
   createdAt: string;
   updatedAt: string;
 }
