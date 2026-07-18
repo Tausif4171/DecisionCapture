@@ -8,7 +8,8 @@ import type {
 } from "@decisioncapture/shared";
 import type { DecisionReviewDraft } from "./decision-review";
 
-const API_URL = (process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4000").replace(/\/+$/, "");
+const configuredApiUrl = process.env.NEXT_PUBLIC_API_URL?.trim();
+const defaultApiUrl = process.env.NODE_ENV === "production" ? "/api" : "http://localhost:4000";
 
 type Query = Record<string, string | number | undefined>;
 
@@ -21,8 +22,40 @@ class ApiError extends Error {
   }
 }
 
+function normalizeApiUrl(value: string) {
+  return value.replace(/\/+$/, "") || "/";
+}
+
+function isAbsoluteHttpUrl(value: string) {
+  return /^https?:\/\//i.test(value);
+}
+
+function frontendHostname() {
+  if (typeof window !== "undefined") {
+    return window.location.hostname.toLowerCase();
+  }
+
+  return (process.env.VERCEL_URL ?? "").toLowerCase();
+}
+
+function apiBaseUrl() {
+  const apiUrl = normalizeApiUrl(configuredApiUrl || defaultApiUrl);
+  const hostname = frontendHostname();
+  const isVercelFrontend = hostname === "vercel.app" || hostname.endsWith(".vercel.app");
+
+  if (isVercelFrontend && isAbsoluteHttpUrl(apiUrl)) {
+    return "/api";
+  }
+
+  return apiUrl;
+}
+
+function apiUrl(path: string) {
+  return `${apiBaseUrl()}${path}`;
+}
+
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
-  const response = await fetch(`${API_URL}${path}`, {
+  const response = await fetch(apiUrl(path), {
     ...init,
     credentials: "include",
     headers: {
@@ -76,7 +109,7 @@ export function getAuthStatus() {
 }
 
 export function authLoginUrl(returnTo: string) {
-  return `${API_URL}/auth/github?returnTo=${encodeURIComponent(returnTo)}`;
+  return `${apiBaseUrl()}/auth/github?returnTo=${encodeURIComponent(returnTo)}`;
 }
 
 export function logout() {

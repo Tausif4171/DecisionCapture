@@ -269,6 +269,8 @@ Set the GitHub OAuth App callback URL to:
 https://your-frontend.vercel.app/api/auth/github/callback
 ```
 
+After deployment, browser network requests should go to `/api/...` on the frontend domain. If the dashboard calls the Render URL directly, the browser may not send the session cookie and GitHub sign-in can loop back to the sign-in screen.
+
 For local testing without the proxy, use:
 
 ```text
