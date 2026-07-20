@@ -1,4 +1,5 @@
 import { Router } from "express";
+import { env } from "./config/env.js";
 import { asyncHandler } from "./middleware/async-handler.js";
 import { authRouter } from "./modules/auth/routes.js";
 import { decisionsRouter } from "./modules/decisions/routes.js";
@@ -12,6 +13,14 @@ router.get("/health", (_request, response) => {
   response.json({
     status: "ok",
     service: "decisioncapture-backend"
+  });
+});
+
+router.get("/health/queue", (_request, response) => {
+  response.json({
+    status: "ok",
+    queueMode: env.QUEUE_MODE,
+    workerEnabled: env.QUEUE_MODE === "bullmq" && env.QUEUE_WORKER_ENABLED
   });
 });
 

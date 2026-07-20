@@ -1,5 +1,8 @@
 import type { Request, Response } from "express";
+import supertest from "supertest";
 import { describe, expect, it } from "vitest";
+import { createApp } from "../src/app.js";
+import { env } from "../src/config/env.js";
 import { githubWebhook } from "../src/modules/github/controller.js";
 import { createGitHubSignature } from "../src/modules/github/signature.js";
 
@@ -71,6 +74,19 @@ describe("GitHub webhook API", () => {
     expect(response.statusCodeValue).toBe(202);
     expect(response.body).toMatchObject({
       status: "ignored"
+    });
+  });
+});
+
+describe("Queue health API", () => {
+  it("reports the configured processing mode and embedded worker state", async () => {
+    const response = await supertest(createApp()).get("/health/queue");
+
+    expect(response.status).toBe(200);
+    expect(response.body).toEqual({
+      status: "ok",
+      queueMode: env.QUEUE_MODE,
+      workerEnabled: env.QUEUE_MODE === "bullmq" && env.QUEUE_WORKER_ENABLED
     });
   });
 });
