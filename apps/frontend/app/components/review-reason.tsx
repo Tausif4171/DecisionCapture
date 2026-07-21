@@ -9,8 +9,9 @@ const reasonConfig = {
   },
   STRUCTURED_FALLBACK: {
     icon: Sparkles,
-    label: "Fallback extraction",
-    description: "Ollama was unavailable or returned unusable output, so DecisionCapture used explicit PR sections only."
+    label: "Fallback needs review",
+    description:
+      "Ollama was unavailable or returned unusable output. DecisionCapture extracted only explicit PR sections and requires human confirmation."
   },
   LOW_CONFIDENCE: {
     icon: AlertTriangle,
