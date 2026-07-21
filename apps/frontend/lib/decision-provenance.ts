@@ -6,12 +6,12 @@ export function formatExtractionConfidence(confidence: number) {
 
 export function formatExtractionMethod(method: DecisionExtractionMethod) {
   if (method === "OLLAMA") {
-    return "Initially captured by Ollama";
+    return "Extraction method: Ollama";
   }
 
   if (method === "STRUCTURED_FALLBACK") {
-    return "Initially captured via structured fallback";
+    return "Extraction method: Structured fallback";
   }
 
-  return "Initial capture method unavailable";
+  return "Extraction method: Unavailable";
 }
