@@ -78,7 +78,7 @@ export default function DashboardPage() {
             <p className="mt-1 text-sm text-neutral-600">
               {pending > 0
                 ? `${pending} decision${pending === 1 ? "" : "s"} need human confirmation before they become permanent memory.`
-                : "No pending review work. High-confidence memories are ready for search."}
+                : "No pending review work. Approved memories are ready for search."}
             </p>
           </div>
           <div className="min-w-48">

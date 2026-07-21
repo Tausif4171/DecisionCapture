@@ -5,6 +5,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { DecisionMemory } from "@decisioncapture/shared";
 import { Check, GitBranch, LockKeyhole, Save, UserRound, X } from "lucide-react";
 import { approveDecision, listDecisions, rejectDecision, updateDecision } from "../../lib/api";
+import { formatExtractionConfidence } from "../../lib/decision-provenance";
 import {
   hasDecisionReviewChanges,
   hasRequiredDecisionReviewFields,
@@ -80,7 +81,7 @@ function PendingDecisionEditor({ decision }: { decision: DecisionMemory }) {
             <span className="rounded-md border border-blue-100 bg-blue-50 px-2 py-1 text-xs font-semibold text-blue-700">
               {decision.category}
             </span>
-            <span className="text-xs text-neutral-500">{Math.round(decision.confidence * 100)}% confidence</span>
+            <span className="text-xs text-neutral-500">{formatExtractionConfidence(decision.confidence)}</span>
           </div>
           <h2 className="text-base font-semibold text-neutral-950">{decision.decision}</h2>
           <div className="flex flex-wrap gap-3 text-xs text-neutral-500">
@@ -229,7 +230,7 @@ export default function PendingPage() {
       {pendingQuery.isLoading ? <LoadingState label="Loading pending decisions" /> : null}
       {pendingQuery.error ? <ErrorState message={pendingQuery.error.message} /> : null}
       {pendingQuery.data?.decisions.length === 0 ? (
-        <EmptyState title="No pending decisions" description="Low-confidence captures will appear here for review." />
+        <EmptyState title="No pending decisions" description="Low-confidence extractions will appear here for review." />
       ) : null}
       {pendingQuery.data?.decisions.length ? (
         <section className="space-y-3">

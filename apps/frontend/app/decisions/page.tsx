@@ -94,7 +94,7 @@ export default function DecisionsPage() {
               className="min-h-10 w-full rounded-md border border-neutral-200 bg-white px-3 text-sm outline-none transition focus:border-neutral-400"
             >
               <option value="recent">Recent</option>
-              <option value="confidence">Confidence</option>
+              <option value="confidence">Extraction confidence</option>
               <option value="oldest">Oldest</option>
             </select>
           </label>

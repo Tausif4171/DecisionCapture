@@ -15,7 +15,7 @@ const reasonConfig = {
   LOW_CONFIDENCE: {
     icon: AlertTriangle,
     label: "Low confidence",
-    description: "The capture looks useful, but confidence is below the automatic approval threshold."
+    description: "The automated extraction looks useful, but its confidence is below the approval threshold."
   },
   AWAITING_REVIEW: {
     icon: PencilLine,
@@ -60,7 +60,7 @@ export function ReviewSummary({ decision }: { decision: DecisionMemory }) {
     return (
       <span className="inline-flex items-center gap-1.5 text-xs text-emerald-700">
         <CheckCircle2 className="size-3.5" aria-hidden="true" />
-        Reviewed by {decision.approvedByLogin}
+        Approved by {decision.approvedByLogin}
       </span>
     );
   }

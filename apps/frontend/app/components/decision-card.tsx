@@ -1,6 +1,7 @@
 import Link from "next/link";
 import type { DecisionMemory } from "@decisioncapture/shared";
 import { ArrowUpRight, GitBranch, UserRound } from "lucide-react";
+import { formatExtractionConfidence } from "../../lib/decision-provenance";
 import { ReviewSummary } from "./review-reason";
 import { StatusBadge } from "./status-badge";
 
@@ -14,7 +15,7 @@ export function DecisionCard({ decision }: { decision: DecisionMemory }) {
             <span className="rounded-md border border-blue-100 bg-blue-50 px-2 py-1 text-xs font-semibold text-blue-700">
               {decision.category}
             </span>
-            <span className="text-xs text-neutral-500">{Math.round(decision.confidence * 100)}% confidence</span>
+            <span className="text-xs text-neutral-500">{formatExtractionConfidence(decision.confidence)}</span>
             <ReviewSummary decision={decision} />
           </div>
           <h3 className="text-base font-semibold text-neutral-950">{decision.decision}</h3>

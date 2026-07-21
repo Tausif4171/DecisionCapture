@@ -241,7 +241,7 @@ describe("GitHub service", () => {
 
     expect(body.body).toContain("@maya.dev");
     expect(body.body).toContain("approve, edit, or reject");
-    expect(body.body).toContain("low-confidence architecture decision");
+    expect(body.body).toContain("low-confidence architecture extraction");
   });
 
   it("explains reopened review requests without calling them low confidence", async () => {

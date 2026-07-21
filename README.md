@@ -9,7 +9,7 @@ Code shows what changed. PR descriptions and review threads often explain why. D
 - Accepts merged PR context from GitHub webhooks or the included GitHub Action.
 - Enriches webhook-only ingestion with full PR files, commits, reviews, comments, approvals, and a bounded diff summary through the GitHub API.
 - Scores PRs before AI analysis so low-value changes are ignored.
-- Extracts decision, reason, alternative, impact, author, source PR, confidence, and category.
+- Extracts decision, reason, alternative, impact, author, source PR, extraction confidence, and category.
 - Stores approved and pending decision memories in PostgreSQL.
 - Processes capture work asynchronously with BullMQ and Redis.
 - Uses an `AIProvider` abstraction with Ollama plus a conservative structured-PR fallback that does not invent missing rationale.
@@ -157,7 +157,7 @@ For non-Docker development, provide PostgreSQL and Redis matching `.env.example`
 | `OLLAMA_REQUEST_TIMEOUT_MS` | Maximum extraction time in milliseconds. Default `120000` supports local CPU inference. |
 | `USE_HEURISTIC_AI_FALLBACK` | Parses explicit Decision/Reason/Alternative/Impact PR sections if Ollama is unavailable. Fallback records always require review. |
 | `AUTO_APPROVAL_ENABLED` | Set to `false` when you want every captured memory to stay pending during a human-review rollout. |
-| `AUTO_APPROVE_CONFIDENCE` | Minimum confidence for auto-approval. Auto-approval still requires explicit reasoning evidence in the PR description or discussion. |
+| `AUTO_APPROVE_CONFIDENCE` | Minimum extraction confidence for auto-approval. Auto-approval still requires explicit reasoning evidence in the PR description or discussion. |
 | `NEXT_PUBLIC_API_URL` | Browser-facing API base URL for the frontend. Use `/api` on Vercel so auth cookies stay same-origin. |
 | `API_INTERNAL_URL` | Server-side backend URL used by the frontend rewrite from `/api/*` to the backend. |
 
@@ -169,7 +169,7 @@ docker compose exec ollama ollama pull llama3.1
 
 Pulling the model is required for real AI extraction. Without it, the backend safely creates a pending draft only from explicit PR sections and honest missing-context placeholders; it never auto-approves fallback output.
 
-DecisionCapture only auto-approves when all of these are true: auto-approval is enabled, extraction did not use fallback, the PR contains explicit reasoning evidence, and confidence is at or above `AUTO_APPROVE_CONFIDENCE`. Missing rationale, fallback extraction, or low confidence always stays pending for review.
+DecisionCapture only auto-approves when all of these are true: auto-approval is enabled, extraction did not use fallback, the PR contains explicit reasoning evidence, and extraction confidence is at or above `AUTO_APPROVE_CONFIDENCE`. Missing rationale, fallback extraction, or low extraction confidence always stays pending for review.
 
 <!--
 ### Using Local Ollama From Render

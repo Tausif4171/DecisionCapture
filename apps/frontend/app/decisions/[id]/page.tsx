@@ -27,6 +27,10 @@ import {
   updateDecision
 } from "../../../lib/api";
 import {
+  formatExtractionConfidence,
+  formatExtractionMethod
+} from "../../../lib/decision-provenance";
+import {
   hasDecisionReviewChanges,
   hasRequiredDecisionReviewFields,
   toDecisionReviewDraft,
@@ -218,7 +222,7 @@ export default function DecisionDetailPage() {
               <span className="rounded-md border border-blue-100 bg-blue-50 px-2 py-1 text-xs font-semibold text-blue-700">
                 {decision.category}
               </span>
-              <span className="text-xs text-neutral-500">{Math.round(decision.confidence * 100)}% confidence</span>
+              <span className="text-xs text-neutral-500">{formatExtractionConfidence(decision.confidence)}</span>
             </div>
             {isEditing ? (
               <textarea
@@ -367,11 +371,7 @@ export default function DecisionDetailPage() {
             </p>
             <p className="flex items-center gap-2">
               <Sparkles className="size-4 text-neutral-400" aria-hidden="true" />
-              {decision.extractionMethod === "OLLAMA"
-                ? "Ollama extraction"
-                : decision.extractionMethod === "STRUCTURED_FALLBACK"
-                  ? "Structured fallback"
-                  : "Legacy extraction"}
+              {formatExtractionMethod(decision.extractionMethod)}
             </p>
             <a
               href={`https://github.com/${decision.repository}/pull/${decision.sourcePR.replace("PR #", "")}`}

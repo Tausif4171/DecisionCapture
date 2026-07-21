@@ -105,7 +105,7 @@ function buildDecisionReviewComment(context: PRContext, decision: DecisionMemory
         ? "DecisionCapture used the structured fallback extractor and needs a human check before saving this memory."
         : decision.reviewReason === "REVIEW_REOPENED"
           ? "DecisionCapture reopened this captured decision for another review."
-          : `DecisionCapture found a low-confidence ${decision.category} decision in this merged PR.`;
+          : `DecisionCapture found a low-confidence ${decision.category} extraction in this merged PR.`;
   const pendingAsk =
     decision.reviewReason === "MISSING_EXPLANATION"
       ? "can you add the missing rationale and approve, edit, or reject this captured memory?"
