@@ -16,13 +16,24 @@ import {
 
 export const decisionsRouter = Router();
 
-decisionsRouter.post("/analyze", requireIngestToken, asyncHandler(analyzeDecision));
+const decisionRoutePaths = {
+  analyze: "/analyze",
+  list: "/",
+  stats: "/stats",
+  detail: "/:id",
+  audit: "/:id/audit",
+  approve: "/:id/approve",
+  reject: "/:id/reject",
+  reopen: "/:id/reopen"
+} as const;
+
+decisionsRouter.post(decisionRoutePaths.analyze, requireIngestToken, asyncHandler(analyzeDecision));
 decisionsRouter.use(requireDashboardUser);
-decisionsRouter.get("/", asyncHandler(listDecisions));
-decisionsRouter.get("/stats", asyncHandler(decisionStats));
-decisionsRouter.get("/:id", asyncHandler(getDecision));
-decisionsRouter.get("/:id/audit", asyncHandler(listDecisionAuditLogs));
-decisionsRouter.patch("/:id", asyncHandler(updateDecision));
-decisionsRouter.patch("/:id/approve", asyncHandler(approveDecision));
-decisionsRouter.patch("/:id/reject", asyncHandler(rejectDecision));
-decisionsRouter.patch("/:id/reopen", asyncHandler(reopenDecision));
+decisionsRouter.get(decisionRoutePaths.list, asyncHandler(listDecisions));
+decisionsRouter.get(decisionRoutePaths.stats, asyncHandler(decisionStats));
+decisionsRouter.get(decisionRoutePaths.detail, asyncHandler(getDecision));
+decisionsRouter.get(decisionRoutePaths.audit, asyncHandler(listDecisionAuditLogs));
+decisionsRouter.patch(decisionRoutePaths.detail, asyncHandler(updateDecision));
+decisionsRouter.patch(decisionRoutePaths.approve, asyncHandler(approveDecision));
+decisionsRouter.patch(decisionRoutePaths.reject, asyncHandler(rejectDecision));
+decisionsRouter.patch(decisionRoutePaths.reopen, asyncHandler(reopenDecision));
