@@ -4,19 +4,31 @@ DecisionCapture is an engineering memory platform that extracts, reviews, and pr
 
 Code shows what changed. PR descriptions and review threads often explain why. DecisionCapture turns that context into searchable, auditable engineering memory before it disappears into old GitHub threads.
 
+## Why It Matters
+
+Engineering decisions are often buried in merged PRs, review comments, and commit history. DecisionCapture keeps the useful context: what was decided, why it was chosen, what alternatives were considered, and what impact the team expected.
+
 ## What It Does
 
-- Accepts merged PR context from GitHub webhooks or the included GitHub Action.
-- Enriches webhook-only ingestion with full PR files, commits, reviews, comments, approvals, and a bounded diff summary through the GitHub API.
+- Captures merged PR context from GitHub webhooks or the included GitHub Action.
+- Enriches webhook payloads with files, commits, reviews, comments, approvals, labels, and a bounded diff summary.
 - Scores PRs before AI analysis so low-value changes are ignored.
-- Extracts decision, reason, alternative, impact, author, source PR, extraction confidence, and category.
-- Stores approved and pending decision memories in PostgreSQL.
+- Extracts the decision, reason, alternative, impact, author, source PR, confidence, and category.
 - Processes capture work asynchronously with BullMQ and Redis.
-- Uses an `AIProvider` abstraction with Ollama plus a conservative structured-PR fallback that does not invent missing rationale.
-- Auto-approves only evidence-backed, high-confidence AI decisions and routes weak or fallback captures to human review.
-- Posts and updates GitHub PR comments when a decision needs review or is later approved, rejected, or reopened.
-- Supports GitHub OAuth, role-based review permissions, reviewer identity, and a persistent decision audit trail.
-- Provides a dashboard for search, detail review, and pending approval.
+- Uses an `AIProvider` abstraction with Ollama and a conservative structured fallback that does not invent missing rationale.
+- Auto-approves only evidence-backed, high-confidence AI-generated decisions.
+- Routes weak, fallback, or missing-explanation captures to the review queue.
+- Posts and updates GitHub PR comments when a decision needs review or is approved, rejected, or reopened.
+- Stores decision memory, review state, and audit history in PostgreSQL.
+- Provides a dashboard for decision search, detail review, category overview, and human confirmation.
+
+## Design Choices
+
+- **Decision memory, not PR tracking:** low-signal PRs are ignored instead of filling the database with noise.
+- **Two-stage extraction:** a rule-based scoring engine filters PRs before invoking the LLM.
+- **Evidence-gated approval:** auto-approval requires high confidence and explicit rationale from the PR context.
+- **Conservative fallback:** when Ollama is unavailable or returns unusable output, DecisionCapture creates a pending draft from explicit PR sections only.
+- **Auditable review:** edits, approvals, rejections, and reopened reviews are stored with reviewer identity.
 
 ## Architecture
 
@@ -31,11 +43,15 @@ flowchart LR
   AI --> Gate["Evidence and confidence gate"]
   Gate -->|Evidence-backed, high confidence| Approved["Approved decision"]
   Gate -->|Missing evidence, low confidence, or fallback| Pending["Pending review"]
-  Pending --> Comment["Backend PR review comment"]
+  Pending --> Comment["GitHub PR review comment"]
   Approved --> DB["PostgreSQL via Prisma"]
   Pending --> DB
   DB --> UI["Next.js dashboard"]
 ```
+
+## Tech Stack
+
+Next.js, TypeScript, Express, PostgreSQL, Prisma, Redis, BullMQ, Ollama, Docker, GitHub Actions, GitHub Webhooks, GitHub OAuth, and GitHub App authentication.
 
 ## Screenshots
 
@@ -43,7 +59,7 @@ flowchart LR
 
 ![DecisionCapture dashboard](docs/screenshots/dashboard.png)
 
-### Search And Review List
+### Decision Memory
 
 ![DecisionCapture decisions list](docs/screenshots/decisions.png)
 
@@ -51,30 +67,32 @@ flowchart LR
 
 ![DecisionCapture decision detail](docs/screenshots/decision-detail.png)
 
-### Pending Queue
+### Review Queue
 
 ![DecisionCapture pending review screen](docs/screenshots/pending.png)
-
 
 ### GitHub PR Review Comment
 
 ![DecisionCapture GitHub PR review comment](docs/screenshots/github-pr-comment.png)
-
 
 ## Repository Layout
 
 ```text
 decisioncapture/
   apps/
-    backend/      Express, Prisma, BullMQ, GitHub ingestion, AI extraction
-    frontend/     Next.js dashboard, search, detail, pending review
+    backend/      Express, Prisma, BullMQ, GitHub ingestion, AI extraction, auth
+    frontend/     Next.js dashboard, search, detail pages, review queue
   packages/
     shared/       Shared TypeScript contracts
+  scripts/        Local Ollama tunnel/proxy helpers
+  docs/
+    screenshots/  README and demo screenshots
   .github/
     workflows/    GitHub Action for merged PR ingestion
+  docker-compose.yml
 ```
 
-## Quick Start With Docker
+## Quick Start with Docker
 
 Docker is the fastest way to run the full local stack.
 
@@ -88,6 +106,8 @@ Open:
 
 - Frontend: http://localhost:3088
 - Backend health: http://localhost:4000/health
+
+The sample `.env.example` starts in local/demo mode with dashboard auth disabled. Enable GitHub OAuth when you want a protected or public-viewer deployment.
 
 Run the local demo PR:
 
@@ -120,7 +140,7 @@ npm run db:push
 npm run dev
 ```
 
-For non-Docker development, provide PostgreSQL and Redis matching `.env.example`, or point `DATABASE_URL` and `REDIS_URL` at your own services.
+For non-Docker development, provide PostgreSQL and Redis matching `.env.example`, or point `DATABASE_URL` and `REDIS_URL` at your own services. Next.js normally runs on port `3000`; the Docker frontend uses port `3088`.
 
 ## Environment Variables
 
@@ -133,7 +153,7 @@ For non-Docker development, provide PostgreSQL and Redis matching `.env.example`
 | `REDIS_URL` | Redis connection string for BullMQ. |
 | `QUEUE_MODE` | `inline` for local direct processing, `bullmq` for queued processing. |
 | `QUEUE_WORKER_ENABLED` | Starts the worker inside the backend process when true. |
-| `FRONTEND_ORIGIN` | Allowed frontend origin for CORS and dashboard links. |
+| `FRONTEND_ORIGIN` | Allowed frontend origins for CORS. Include each frontend URL that should call the backend. |
 | `APP_BASE_URL` | Public dashboard base URL used in PR review comment links. |
 | `AUTH_MODE` | `disabled` for local/demo access or `github` to require GitHub sign-in for review actions. |
 | `AUTH_SESSION_SECRET` | Secret used to sign dashboard sessions. Required and at least 32 characters when GitHub auth is enabled. |
@@ -144,7 +164,7 @@ For non-Docker development, provide PostgreSQL and Redis matching `.env.example`
 | `AUTH_GITHUB_PUBLIC_VIEWERS` | When true, any GitHub account can sign in as `VIEWER`; useful for public portfolio/demo deployments. |
 | `GITHUB_CLIENT_ID` | GitHub OAuth App client ID for dashboard sign-in. |
 | `GITHUB_CLIENT_SECRET` | GitHub OAuth App client secret for dashboard sign-in. |
-| `GITHUB_OAUTH_CALLBACK_URL` | Optional explicit OAuth callback URL sent to GitHub. Use the frontend `/api/auth/github/callback` URL when proxying the backend through Vercel. |
+| `GITHUB_OAUTH_CALLBACK_URL` | Optional explicit OAuth callback URL sent to GitHub. Hosted frontends that proxy `/api` should use the frontend `/api/auth/github/callback` URL. |
 | `GITHUB_WEBHOOK_SECRET` | HMAC secret for GitHub webhook signature verification. Replace the sample value before real webhook use. |
 | `GITHUB_API_TOKEN` | GitHub PAT or GitHub App installation token used to enrich webhook payloads and post or update PR review comments. |
 | `GITHUB_APP_ID` | Preferred GitHub App ID for short-lived bot authentication. Configure with installation ID and private key. |
@@ -167,7 +187,7 @@ To use a real Ollama model in Docker:
 docker compose exec ollama ollama pull llama3.1
 ```
 
-Pulling the model is required for real AI extraction. Without it, the backend safely creates a pending draft only from explicit PR sections and honest missing-context placeholders; it never auto-approves fallback output.
+Pulling the model is required for real AI extraction. Without it, the backend only creates pending drafts from explicit PR sections or clearly marks missing rationale; it never auto-approves fallback output.
 
 DecisionCapture only auto-approves when all of these are true: auto-approval is enabled, extraction did not use fallback, the PR contains explicit reasoning evidence, and extraction confidence is at or above `AUTO_APPROVE_CONFIDENCE`. Missing rationale, fallback extraction, or low extraction confidence always stays pending for review.
 
@@ -193,6 +213,7 @@ The response should show `"reachable": true` and `"modelAvailable": true`.
 
 - `GET /health` returns backend health.
 - `GET /health/ai` checks whether the configured Ollama endpoint and model are reachable.
+- `GET /health/queue` returns queue mode and worker health details.
 - `POST /github/webhook` receives GitHub `pull_request.closed` events and only analyzes merged PRs.
 - `POST /decisions/analyze` accepts full PR context from the GitHub Action or manual ingestion and normally queues work asynchronously. Add `?wait=true` only for manual debugging when you want the processed result immediately.
 - `GET /decisions` searches decisions by keyword, status, repository, category, and sort.
@@ -201,7 +222,7 @@ The response should show `"reachable": true` and `"modelAvailable": true`.
 - `GET /decisions/:id/audit` returns the decision review audit trail.
 - `PATCH /decisions/:id` saves edits while leaving a decision pending.
 - `PATCH /decisions/:id/approve` approves a pending decision and optional edits.
-- `PATCH /decisions/:id/reject` rejects a pending decision.
+- `PATCH /decisions/:id/reject` rejects a pending decision. The UI requires a rejection reason and stores it in the audit history.
 - `PATCH /decisions/:id/reopen` reopens an approved or rejected decision with a required audit reason. With GitHub auth enabled, only admins and maintainers may use it.
 - `GET /auth/me` returns the current dashboard authentication state.
 - `GET /auth/github` starts GitHub OAuth login and `GET /auth/github/callback` completes it.
@@ -242,7 +263,7 @@ If you want to test this from a local machine, expose the backend with a tunnel 
 
 For direct webhooks, set the GitHub webhook secret to match `GITHUB_WEBHOOK_SECRET`. With `GITHUB_API_TOKEN` configured, webhook-only ingestion fetches the same rich PR context the requirements call for instead of relying on the limited webhook payload alone.
 
-## Dashboard Authentication And RBAC
+## Dashboard Auth and RBAC
 
 Local/demo mode remains open by default:
 
@@ -250,14 +271,14 @@ Local/demo mode remains open by default:
 AUTH_MODE=disabled
 ```
 
-For a protected dashboard, create a GitHub OAuth App. In hosted Vercel + Render deployments, route browser traffic through the Vercel origin so auth cookies stay first-party:
+For a protected dashboard, create a GitHub OAuth App. In hosted deployments where the frontend proxies API requests, route browser traffic through the frontend origin so auth cookies stay first-party:
 
 ```env
-# Vercel
+# Frontend
 NEXT_PUBLIC_API_URL=/api
 API_INTERNAL_URL=https://your-backend.onrender.com
 
-# Render backend
+# Backend
 APP_BASE_URL=https://your-frontend.vercel.app
 FRONTEND_ORIGIN=https://your-frontend.vercel.app
 GITHUB_OAUTH_CALLBACK_URL=https://your-frontend.vercel.app/api/auth/github/callback
@@ -269,7 +290,7 @@ Set the GitHub OAuth App callback URL to:
 https://your-frontend.vercel.app/api/auth/github/callback
 ```
 
-After deployment, browser network requests should go to `/api/...` on the frontend domain. If the dashboard calls the Render URL directly, the browser may not send the session cookie and GitHub sign-in can loop back to the sign-in screen.
+After deployment, browser network requests should go to `/api/...` on the frontend domain. If the dashboard calls the backend domain directly, the browser may not send the session cookie and GitHub sign-in can loop back to the sign-in screen.
 
 For local testing without the proxy, use:
 
@@ -284,9 +305,9 @@ AUTH_MODE=github
 AUTH_SESSION_SECRET=replace-with-at-least-32-random-characters
 GITHUB_CLIENT_ID=your-oauth-client-id
 GITHUB_CLIENT_SECRET=your-oauth-client-secret
-GITHUB_OAUTH_CALLBACK_URL=https://your-frontend.vercel.app/api/auth/github/callback
+GITHUB_OAUTH_CALLBACK_URL=http://localhost:4000/auth/github/callback
 AUTH_ALLOWED_LOGINS=
-AUTH_ADMIN_LOGINS=Tausif4171
+AUTH_ADMIN_LOGINS=your-github-login
 AUTH_MAINTAINER_LOGINS=
 AUTH_REVIEWER_LOGINS=
 AUTH_GITHUB_PUBLIC_VIEWERS=false
@@ -312,7 +333,7 @@ Review permissions are enforced by the backend:
 - Unauthenticated users receive `401` for dashboard data and review actions when GitHub auth is enabled. Ingestion remains protected separately by `INGEST_API_TOKEN`.
 - Unauthorized signed-in users receive `403`.
 
-Each edit, approval, rejection, and reopen is stored with the actor and before/after state. Decision cards show one status plus muted reviewer attribution, while the detail page shows the complete audit history. GitHub API/App credentials remain backend service credentials for PR enrichment/comments; they are separate from OAuth client credentials used for human dashboard sign-in.
+Each edit, approval, rejection, and reopen is stored with the actor, note, and before/after state. Decision cards show one status plus muted reviewer attribution, while the detail page shows the complete audit history. GitHub API/App credentials remain backend service credentials for PR enrichment/comments; they are separate from OAuth client credentials used for human dashboard sign-in.
 
 ## Verification
 
