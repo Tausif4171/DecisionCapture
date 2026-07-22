@@ -15,9 +15,13 @@ export function LoadingState({ label = "Loading" }: { label?: string }) {
   );
 }
 
+export function isAuthRequiredMessage(message: string) {
+  return message.toLowerCase().includes("github sign-in is required");
+}
+
 export function ErrorState({ message }: { message: string }) {
   const pathname = usePathname();
-  const isAuthRequired = message.toLowerCase().includes("github sign-in is required");
+  const isAuthRequired = isAuthRequiredMessage(message);
 
   if (isAuthRequired) {
     return (

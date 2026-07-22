@@ -11,7 +11,13 @@ import {
   hasRequiredDecisionReviewFields,
   toDecisionReviewDraft
 } from "../../lib/decision-review";
-import { EmptyState, ErrorState, LoadingState } from "../components/state-views";
+import { useProtectedPageAccess } from "../components/protected-page-access";
+import {
+  EmptyState,
+  ErrorState,
+  isAuthRequiredMessage,
+  LoadingState
+} from "../components/state-views";
 import { StatusBadge } from "../components/status-badge";
 import { ReviewReasonCallout } from "../components/review-reason";
 import { ReviewReasonDialog } from "../components/review-reason-dialog";
@@ -253,10 +259,20 @@ function PendingDecisionEditor({ decision }: { decision: DecisionMemory }) {
 }
 
 export default function PendingPage() {
+  const access = useProtectedPageAccess();
   const pendingQuery = useQuery({
     queryKey: ["decisions", { status: "PENDING" }],
-    queryFn: () => listDecisions({ status: "PENDING", sort: "recent", limit: 50 })
+    queryFn: () => listDecisions({ status: "PENDING", sort: "recent", limit: 50 }),
+    enabled: access.canLoadProtectedData
   });
+
+  if (access.gate) {
+    return access.gate;
+  }
+
+  if (pendingQuery.error && isAuthRequiredMessage(pendingQuery.error.message)) {
+    return <ErrorState message={pendingQuery.error.message} />;
+  }
 
   return (
     <div className="space-y-5">

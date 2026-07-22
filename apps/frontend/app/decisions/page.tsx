@@ -6,8 +6,14 @@ import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { ArrowLeft, ArrowRight, Search, X } from "lucide-react";
 import { listDecisions } from "../../lib/api";
 import { DecisionCard } from "../components/decision-card";
+import { useProtectedPageAccess } from "../components/protected-page-access";
 import { SelectMenu } from "../components/select-menu";
-import { EmptyState, ErrorState, LoadingState } from "../components/state-views";
+import {
+  EmptyState,
+  ErrorState,
+  isAuthRequiredMessage,
+  LoadingState
+} from "../components/state-views";
 
 const PAGE_SIZE = 25;
 const SEARCH_DEBOUNCE_MS = 350;
@@ -24,6 +30,7 @@ const SORT_OPTIONS = [
 ];
 
 function DecisionsPageContent() {
+  const access = useProtectedPageAccess();
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
@@ -88,8 +95,17 @@ function DecisionsPageContent() {
         limit: PAGE_SIZE,
         offset: page * PAGE_SIZE
       }),
-    placeholderData: keepPreviousData
+    placeholderData: keepPreviousData,
+    enabled: access.canLoadProtectedData
   });
+
+  if (access.gate) {
+    return access.gate;
+  }
+
+  if (decisionsQuery.error && isAuthRequiredMessage(decisionsQuery.error.message)) {
+    return <ErrorState message={decisionsQuery.error.message} />;
+  }
 
   function submitSearch() {
     updateParams({ q: draftSearch.trim() || null, page: null });

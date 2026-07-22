@@ -21,7 +21,6 @@ import {
 } from "lucide-react";
 import {
   approveDecision,
-  getAuthStatus,
   getDecision,
   listDecisionAudit,
   rejectDecision,
@@ -38,6 +37,7 @@ import {
   toDecisionReviewDraft,
   type DecisionReviewDraft
 } from "../../../lib/decision-review";
+import { useProtectedPageAccess } from "../../components/protected-page-access";
 import { ErrorState, LoadingState } from "../../components/state-views";
 import { ReviewReasonCallout } from "../../components/review-reason";
 import { ReviewReasonDialog } from "../../components/review-reason-dialog";
@@ -80,6 +80,7 @@ function formatAuditDate(value: string) {
 export default function DecisionDetailPage() {
   const params = useParams<{ id: string }>();
   const queryClient = useQueryClient();
+  const access = useProtectedPageAccess();
   const [isEditing, setIsEditing] = useState(false);
   const [draft, setDraft] = useState<DecisionReviewDraft | null>(null);
   const [isReopenDialogOpen, setIsReopenDialogOpen] = useState(false);
@@ -91,20 +92,16 @@ export default function DecisionDetailPage() {
 
   const decisionQuery = useQuery({
     queryKey: ["decision", params.id],
-    queryFn: () => getDecision(params.id)
+    queryFn: () => getDecision(params.id),
+    enabled: access.canLoadProtectedData
   });
 
   const auditQuery = useQuery({
     queryKey: ["decision-audit", params.id],
     queryFn: () => listDecisionAudit(params.id),
-    enabled: Boolean(decisionQuery.data)
+    enabled: access.canLoadProtectedData && Boolean(decisionQuery.data)
   });
-
-  const authQuery = useQuery({
-    queryKey: ["auth"],
-    queryFn: getAuthStatus,
-    staleTime: 60_000
-  });
+  const authQuery = access.authQuery;
 
   const decision = decisionQuery.data;
   const formValue = draft ?? (decision ? toDecisionReviewDraft(decision) : null);
@@ -200,6 +197,10 @@ export default function DecisionDetailPage() {
     }
 
     setDraft((current) => (current ? { ...current, [field]: value } : current));
+  }
+
+  if (access.gate) {
+    return access.gate;
   }
 
   if (decisionQuery.isLoading) {

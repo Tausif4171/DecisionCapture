@@ -5,6 +5,7 @@ import { useQuery } from "@tanstack/react-query";
 import { ArrowUpRight, CheckCircle2, Clock3, Database, GitPullRequestArrow, XCircle } from "lucide-react";
 import { getStats } from "../lib/api";
 import { DecisionCard } from "./components/decision-card";
+import { useProtectedPageAccess } from "./components/protected-page-access";
 import { EmptyState, ErrorState, LoadingState } from "./components/state-views";
 
 const metricIcons = {
@@ -15,10 +16,16 @@ const metricIcons = {
 };
 
 export default function DashboardPage() {
+  const access = useProtectedPageAccess();
   const statsQuery = useQuery({
     queryKey: ["stats"],
-    queryFn: getStats
+    queryFn: getStats,
+    enabled: access.canLoadProtectedData
   });
+
+  if (access.gate) {
+    return access.gate;
+  }
 
   if (statsQuery.isLoading) {
     return <LoadingState label="Loading dashboard" />;
