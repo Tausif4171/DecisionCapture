@@ -18,3 +18,7 @@ export type DecisionReviewUpdates = {
 export type DecisionReopenInput = {
   reason: string;
 };
+
+export type DecisionRejectInput = {
+  reason?: string;
+};

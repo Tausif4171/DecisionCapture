@@ -415,7 +415,9 @@ describe("DecisionService", () => {
       })
     );
 
-    const result = await service.rejectDecision("decision-reject");
+    const result = await service.rejectDecision("decision-reject", {
+      reason: "This extraction describes an implementation detail, not a durable decision."
+    });
 
     expect(mockPrisma.decisionMemory.update).toHaveBeenCalledWith({
       where: { id: "decision-reject" },
@@ -425,6 +427,14 @@ describe("DecisionService", () => {
         rejectedAt: expect.any(Date)
       })
     });
+    expect(mockPrisma.decisionAuditLog.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          action: "REJECTED",
+          note: "This extraction describes an implementation detail, not a durable decision."
+        })
+      })
+    );
     expect(result.status).toBe("REJECTED");
   });
 

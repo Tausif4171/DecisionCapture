@@ -10,6 +10,8 @@ import {
   ExternalLink,
   GitBranch,
   History,
+  Loader2,
+  PencilLine,
   RotateCcw,
   Save,
   ShieldCheck,
@@ -38,6 +40,7 @@ import {
 } from "../../../lib/decision-review";
 import { ErrorState, LoadingState } from "../../components/state-views";
 import { ReviewReasonCallout } from "../../components/review-reason";
+import { ReviewReasonDialog } from "../../components/review-reason-dialog";
 import { StatusBadge } from "../../components/status-badge";
 
 const FILE_PREVIEW_LIMIT = 8;
@@ -81,6 +84,8 @@ export default function DecisionDetailPage() {
   const [draft, setDraft] = useState<DecisionReviewDraft | null>(null);
   const [isReopenDialogOpen, setIsReopenDialogOpen] = useState(false);
   const [reopenReason, setReopenReason] = useState("");
+  const [isRejectDialogOpen, setIsRejectDialogOpen] = useState(false);
+  const [rejectReason, setRejectReason] = useState("");
   const [showAllFiles, setShowAllFiles] = useState(false);
   const [showAllAudit, setShowAllAudit] = useState(false);
 
@@ -110,8 +115,8 @@ export default function DecisionDetailPage() {
   const hasRequiredFields = formValue ? hasRequiredDecisionReviewFields(formValue) : false;
   const readOnlyMessage =
     decision?.status === "APPROVED"
-      ? "Approved decisions are locked so the final engineering memory stays auditable."
-      : "Rejected memories are kept read-only for audit. Reopen review if this decision needs another pass.";
+      ? "Approved decisions are locked to preserve an auditable record."
+      : "Rejected decisions remain read-only in the audit history. Reopen the review to reconsider this record.";
 
   const updateMutation = useMutation({
     mutationFn: () => updateDecision(params.id, formValue!),
@@ -138,8 +143,10 @@ export default function DecisionDetailPage() {
   });
 
   const rejectMutation = useMutation({
-    mutationFn: () => rejectDecision(params.id),
+    mutationFn: () => rejectDecision(params.id, rejectReason),
     onSuccess: async () => {
+      setIsRejectDialogOpen(false);
+      setRejectReason("");
       await queryClient.invalidateQueries({ queryKey: ["decision", params.id] });
       await queryClient.invalidateQueries({ queryKey: ["decision-audit", params.id] });
       await queryClient.invalidateQueries({ queryKey: ["decisions"] });
@@ -164,8 +171,7 @@ export default function DecisionDetailPage() {
     approveMutation.isPending ||
     rejectMutation.isPending ||
     reopenMutation.isPending;
-  const actionError =
-    updateMutation.error ?? approveMutation.error ?? rejectMutation.error ?? reopenMutation.error;
+  const actionError = updateMutation.error ?? approveMutation.error;
 
   function startEditing() {
     if (!decision) {
@@ -215,7 +221,7 @@ export default function DecisionDetailPage() {
   return (
     <div className="space-y-5">
       <section className="rounded-md border border-neutral-200 bg-white p-5 shadow-sm">
-        <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+        <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-start">
           <div className="max-w-4xl">
             <div className="mb-3 flex flex-wrap items-center gap-2">
               <StatusBadge status={decision.status} />
@@ -234,15 +240,21 @@ export default function DecisionDetailPage() {
               <h1 className="text-2xl font-semibold text-neutral-950">{decision.decision}</h1>
             )}
           </div>
-          <div className="flex flex-wrap gap-2">
+          <div className="grid w-full grid-cols-2 gap-2 sm:flex sm:w-auto sm:flex-nowrap sm:justify-end">
             {isPendingDecision && canReviewPendingDecision ? (
               <button
                 type="button"
                 onClick={isEditing ? cancelEditing : startEditing}
-                className="inline-flex min-h-10 items-center gap-2 rounded-md border border-neutral-200 px-3 py-2 text-sm font-medium text-neutral-700 transition hover:bg-neutral-50"
+                className={`inline-flex min-h-10 items-center justify-center gap-2 whitespace-nowrap rounded-md border border-neutral-200 px-3 py-2 text-sm font-medium text-neutral-700 transition hover:bg-neutral-50 ${
+                  isEditing ? "order-1" : "order-2 sm:order-1"
+                }`}
                 title={isEditing ? "Cancel editing" : "Edit decision"}
               >
-                {isEditing ? <X className="size-4" aria-hidden="true" /> : <Save className="size-4" aria-hidden="true" />}
+                {isEditing ? (
+                  <X className="size-4" aria-hidden="true" />
+                ) : (
+                  <PencilLine className="size-4" aria-hidden="true" />
+                )}
                 {isEditing ? "Cancel" : "Edit"}
               </button>
             ) : null}
@@ -251,11 +263,15 @@ export default function DecisionDetailPage() {
                 type="button"
                 onClick={() => updateMutation.mutate()}
                 disabled={!isDirty || !hasRequiredFields || isBusy}
-                className="inline-flex min-h-10 items-center gap-2 rounded-md border border-neutral-200 px-3 py-2 text-sm font-medium text-neutral-700 transition hover:bg-neutral-50 disabled:text-neutral-400"
+                className="order-2 inline-flex min-h-10 items-center justify-center gap-2 whitespace-nowrap rounded-md border border-neutral-200 px-3 py-2 text-sm font-medium text-neutral-700 transition hover:bg-neutral-50 disabled:text-neutral-400"
                 title="Save draft without approving"
               >
-                <Save className="size-4" aria-hidden="true" />
-                Save draft
+                {updateMutation.isPending ? (
+                  <Loader2 className="size-4 animate-spin" aria-hidden="true" />
+                ) : (
+                  <Save className="size-4" aria-hidden="true" />
+                )}
+                {updateMutation.isPending ? "Saving..." : "Save draft"}
               </button>
             ) : null}
             {isPendingDecision && canReviewPendingDecision ? (
@@ -264,17 +280,26 @@ export default function DecisionDetailPage() {
                   type="button"
                   onClick={() => approveMutation.mutate()}
                   disabled={!hasRequiredFields || isBusy}
-                  className="inline-flex min-h-10 items-center gap-2 rounded-md bg-emerald-600 px-3 py-2 text-sm font-semibold text-white transition hover:bg-emerald-700 disabled:bg-emerald-300"
+                  className={`inline-flex min-h-10 items-center justify-center gap-2 whitespace-nowrap rounded-md bg-emerald-600 px-3 py-2 text-sm font-semibold text-white transition hover:bg-emerald-700 disabled:bg-emerald-300 ${
+                    isEditing ? "order-3" : "order-1 col-span-2 sm:order-2 sm:col-auto"
+                  }`}
                   title="Approve decision"
                 >
-                  <Check className="size-4" aria-hidden="true" />
-                  Approve
+                  {approveMutation.isPending ? (
+                    <Loader2 className="size-4 animate-spin" aria-hidden="true" />
+                  ) : (
+                    <Check className="size-4" aria-hidden="true" />
+                  )}
+                  {approveMutation.isPending ? "Approving..." : "Approve"}
                 </button>
                 <button
                   type="button"
-                  onClick={() => rejectMutation.mutate()}
+                  onClick={() => {
+                    rejectMutation.reset();
+                    setIsRejectDialogOpen(true);
+                  }}
                   disabled={isBusy}
-                  className="inline-flex min-h-10 items-center gap-2 rounded-md border border-neutral-200 px-3 py-2 text-sm font-medium text-neutral-700 transition hover:bg-neutral-50 disabled:text-neutral-400"
+                  className={`${isEditing ? "order-4" : "order-3"} inline-flex min-h-10 items-center justify-center gap-2 whitespace-nowrap rounded-md border border-red-200 px-3 py-2 text-sm font-medium text-red-700 transition hover:bg-red-50 disabled:border-neutral-200 disabled:text-neutral-400`}
                   title="Reject decision"
                 >
                   <X className="size-4" aria-hidden="true" />
@@ -285,9 +310,12 @@ export default function DecisionDetailPage() {
             {!isPendingDecision && canReopen ? (
               <button
                 type="button"
-                onClick={() => setIsReopenDialogOpen(true)}
+                onClick={() => {
+                  reopenMutation.reset();
+                  setIsReopenDialogOpen(true);
+                }}
                 disabled={isBusy}
-                className="inline-flex min-h-10 items-center gap-2 rounded-md border border-neutral-200 px-3 py-2 text-sm font-medium text-neutral-700 transition hover:bg-neutral-50 disabled:text-neutral-400"
+                className="col-span-2 inline-flex min-h-10 items-center justify-center gap-2 whitespace-nowrap rounded-md border border-neutral-200 px-3 py-2 text-sm font-medium text-neutral-700 transition hover:bg-neutral-50 disabled:text-neutral-400 sm:col-auto"
                 title="Reopen decision review"
               >
                 <RotateCcw className="size-4" aria-hidden="true" />
@@ -300,12 +328,11 @@ export default function DecisionDetailPage() {
           <p className="mt-3 text-sm text-red-600">{actionError.message}</p>
         ) : isPendingDecision && updateMutation.isSuccess ? (
           <p className="mt-3 text-sm text-neutral-500">
-            Draft saved. This decision remains pending until you approve or reject it.
+            Draft saved. This decision is still pending.
           </p>
         ) : isPendingDecision && authQuery.data && !canReviewPendingDecision ? (
           <p className="mt-3 text-sm text-neutral-500">
-            Viewer access can inspect pending decisions. Review actions are limited to configured reviewers and PR
-            participants.
+            You can view this decision, but only authorized reviewers and PR participants can review it.
           </p>
         ) : !isPendingDecision ? (
           <p className="mt-3 text-sm text-neutral-500">{readOnlyMessage}</p>
@@ -358,7 +385,7 @@ export default function DecisionDetailPage() {
         <aside className="space-y-4 rounded-md border border-neutral-200 bg-white p-5 shadow-sm">
           <div className="flex items-center gap-2 text-sm font-semibold text-neutral-950">
             <ShieldCheck className="size-4 text-emerald-600" aria-hidden="true" />
-            Source
+            Source and provenance
           </div>
           <div className="space-y-3 text-sm text-neutral-600">
             <p className="flex items-center gap-2">
@@ -412,7 +439,7 @@ export default function DecisionDetailPage() {
           <div className="border-t border-neutral-100 pt-4">
             <div className="mb-3 flex items-center gap-2 text-sm font-semibold text-neutral-950">
               <History className="size-4 text-neutral-500" aria-hidden="true" />
-              Review
+              Audit history
             </div>
             <div className="space-y-2 text-xs text-neutral-600">
               {visibleAudit.length ? (
@@ -444,66 +471,45 @@ export default function DecisionDetailPage() {
         </aside>
       </section>
 
-      {isReopenDialogOpen ? (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" role="presentation">
-          <div
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="reopen-title"
-            className="w-full max-w-md rounded-md bg-white p-5 shadow-xl"
-          >
-            <div className="flex items-start justify-between gap-4">
-              <div>
-                <h2 id="reopen-title" className="text-lg font-semibold text-neutral-950">
-                  Reopen review
-                </h2>
-                <p className="mt-1 text-sm text-neutral-600">
-                  The reason will be saved in the audit history.
-                </p>
-              </div>
-              <button
-                type="button"
-                onClick={() => setIsReopenDialogOpen(false)}
-                className="inline-flex size-9 items-center justify-center rounded-md text-neutral-500 hover:bg-neutral-100"
-                title="Close"
-              >
-                <X className="size-4" aria-hidden="true" />
-              </button>
-            </div>
-            <label className="mt-4 block">
-              <span className="text-xs font-semibold uppercase tracking-normal text-neutral-500">Reason</span>
-              <textarea
-                autoFocus
-                value={reopenReason}
-                onChange={(event) => setReopenReason(event.target.value)}
-                className="mt-1 min-h-28 w-full rounded-md border border-neutral-200 p-3 text-sm outline-none focus:border-neutral-400"
-                placeholder="What changed or needs another review?"
-              />
-            </label>
-            {reopenMutation.error instanceof Error ? (
-              <p className="mt-2 text-sm text-red-600">{reopenMutation.error.message}</p>
-            ) : null}
-            <div className="mt-4 flex justify-end gap-2">
-              <button
-                type="button"
-                onClick={() => setIsReopenDialogOpen(false)}
-                className="min-h-10 rounded-md border border-neutral-200 px-3 py-2 text-sm font-medium text-neutral-700 hover:bg-neutral-50"
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                onClick={() => reopenMutation.mutate()}
-                disabled={reopenReason.trim().length < 10 || reopenMutation.isPending}
-                className="inline-flex min-h-10 items-center gap-2 rounded-md bg-neutral-950 px-3 py-2 text-sm font-semibold text-white hover:bg-neutral-800 disabled:bg-neutral-300"
-              >
-                <RotateCcw className="size-4" aria-hidden="true" />
-                Reopen
-              </button>
-            </div>
-          </div>
-        </div>
-      ) : null}
+      <ReviewReasonDialog
+        open={isRejectDialogOpen}
+        title="Reject decision"
+        description="The decision will remain available in the audit history."
+        label="Reason for rejection"
+        placeholder="Why should this decision not become permanent memory?"
+        value={rejectReason}
+        confirmLabel="Reject decision"
+        pendingLabel="Rejecting..."
+        destructive
+        isPending={rejectMutation.isPending}
+        error={rejectMutation.error}
+        onChange={setRejectReason}
+        onClose={() => {
+          setIsRejectDialogOpen(false);
+          setRejectReason("");
+          rejectMutation.reset();
+        }}
+        onConfirm={() => rejectMutation.mutate()}
+      />
+      <ReviewReasonDialog
+        open={isReopenDialogOpen}
+        title="Reopen review"
+        description="The reason will be saved in the audit history."
+        label="Reason for reopening"
+        placeholder="What changed or needs another review?"
+        value={reopenReason}
+        confirmLabel="Reopen review"
+        pendingLabel="Reopening..."
+        isPending={reopenMutation.isPending}
+        error={reopenMutation.error}
+        onChange={setReopenReason}
+        onClose={() => {
+          setIsReopenDialogOpen(false);
+          setReopenReason("");
+          reopenMutation.reset();
+        }}
+        onConfirm={() => reopenMutation.mutate()}
+      />
     </div>
   );
 }

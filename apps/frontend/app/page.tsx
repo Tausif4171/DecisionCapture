@@ -45,9 +45,9 @@ export default function DashboardPage() {
       <section className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
         <div>
           <p className="text-sm font-medium text-emerald-700">Merged PR memory</p>
-          <h1 className="mt-1 text-2xl font-semibold text-neutral-950">Decision operations</h1>
+          <h1 className="mt-1 text-2xl font-semibold text-neutral-950">Decision overview</h1>
           <p className="mt-2 max-w-3xl text-sm leading-6 text-neutral-600">
-            Monitor captured engineering decisions, pending review work, and the categories building up in team memory.
+            Track captured engineering decisions, review work, and team memory by category.
           </p>
         </div>
         <Link
@@ -74,11 +74,11 @@ export default function DashboardPage() {
       <section className="rounded-md border border-neutral-200 bg-white p-4 shadow-sm">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <h2 className="text-sm font-semibold text-neutral-950">Capture quality</h2>
+            <h2 className="text-sm font-semibold text-neutral-950">Review progress</h2>
             <p className="mt-1 text-sm text-neutral-600">
               {pending > 0
-                ? `${pending} decision${pending === 1 ? "" : "s"} need human confirmation before they become permanent memory.`
-                : "No pending review work. Approved memories are ready for search."}
+                ? `${pending} ${pending === 1 ? "decision needs" : "decisions need"} human confirmation before ${pending === 1 ? "it becomes" : "they become"} permanent memory.`
+                : "No decisions need review. Approved memories are ready for search."}
             </p>
           </div>
           <div className="min-w-48">

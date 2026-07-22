@@ -15,7 +15,7 @@ const errorCopy: Record<AuthErrorReason, { title: string; description: string; n
   "account-not-allowed": {
     title: "GitHub account not allowed",
     description:
-      "DecisionCapture is restricted to configured project maintainers and reviewers. Use an approved GitHub account to continue.",
+      "This deployment does not allow this GitHub account. Use an account with access or ask the project owner.",
     note: "If GitHub keeps selecting the wrong account, sign out of GitHub first and try again."
   },
   "invalid-state": {
@@ -25,8 +25,8 @@ const errorCopy: Record<AuthErrorReason, { title: string; description: string; n
   },
   "oauth-failed": {
     title: "GitHub sign-in did not complete",
-    description: "GitHub authentication could not be completed. Try signing in again with an approved account.",
-    note: "If the issue continues, check the GitHub OAuth client settings and backend environment variables."
+    description: "GitHub authentication could not be completed. Try signing in again.",
+    note: "If the issue continues, contact the project owner."
   }
 };
 

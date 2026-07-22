@@ -141,9 +141,10 @@ export function approveDecision(id: string, body: DecisionReviewDraft) {
   });
 }
 
-export function rejectDecision(id: string) {
+export function rejectDecision(id: string, reason?: string) {
   return request<DecisionMemory>(`/decisions/${id}/reject`, {
-    method: "PATCH"
+    method: "PATCH",
+    body: JSON.stringify(reason ? { reason } : {})
   });
 }
 

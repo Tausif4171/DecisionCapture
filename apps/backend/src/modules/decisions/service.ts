@@ -20,7 +20,12 @@ import type { AIProvider } from "../ai/provider.js";
 import { privilegedRoles, reopenRoles, type ReviewActor } from "../auth/types.js";
 import { assessExplanationEvidence, MISSING_REASON } from "./evidence.js";
 import { resolveDecisionStatus, scoreDecisionContext } from "./scoring.js";
-import type { DecisionReopenInput, DecisionReviewUpdates, DecisionSearchOptions } from "./types.js";
+import type {
+  DecisionRejectInput,
+  DecisionReopenInput,
+  DecisionReviewUpdates,
+  DecisionSearchOptions
+} from "./types.js";
 import { prContextSchema } from "./validation.js";
 
 type DecisionMemoryRecordWithLatestAudit = DecisionMemoryRecord & {
@@ -610,6 +615,7 @@ export class DecisionService {
 
   async rejectDecision(
     id: string,
+    input: DecisionRejectInput = {},
     actor: ReviewActor = { authRequired: false }
   ): Promise<DecisionMemory> {
     const existingDecision = await this.requirePendingDecision(id, "reject", actor);
@@ -634,6 +640,7 @@ export class DecisionService {
             action: "REJECTED",
             actorUserId: actor.user?.id,
             actorLogin: auditActorLogin(actor),
+            note: input.reason,
             before: decisionSnapshot(existingDecision),
             after: decisionSnapshot(updatedDecision)
           }

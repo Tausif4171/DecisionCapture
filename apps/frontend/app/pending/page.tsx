@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { DecisionMemory } from "@decisioncapture/shared";
-import { Check, GitBranch, LockKeyhole, Save, UserRound, X } from "lucide-react";
+import { Check, GitBranch, Loader2, LockKeyhole, Save, UserRound, X } from "lucide-react";
 import { approveDecision, listDecisions, rejectDecision, updateDecision } from "../../lib/api";
 import { formatExtractionConfidence } from "../../lib/decision-provenance";
 import {
@@ -14,10 +14,13 @@ import {
 import { EmptyState, ErrorState, LoadingState } from "../components/state-views";
 import { StatusBadge } from "../components/status-badge";
 import { ReviewReasonCallout } from "../components/review-reason";
+import { ReviewReasonDialog } from "../components/review-reason-dialog";
 
 function PendingDecisionEditor({ decision }: { decision: DecisionMemory }) {
   const queryClient = useQueryClient();
   const [draft, setDraft] = useState(() => toDecisionReviewDraft(decision));
+  const [isRejectDialogOpen, setIsRejectDialogOpen] = useState(false);
+  const [rejectReason, setRejectReason] = useState("");
   const canReview = Boolean(decision.reviewPermissions?.canReview);
   const isDirty = hasDecisionReviewChanges(decision, draft);
   const hasRequiredFields = hasRequiredDecisionReviewFields(draft);
@@ -42,8 +45,10 @@ function PendingDecisionEditor({ decision }: { decision: DecisionMemory }) {
   });
 
   const rejectMutation = useMutation({
-    mutationFn: () => rejectDecision(decision.id),
+    mutationFn: () => rejectDecision(decision.id, rejectReason),
     onSuccess: async () => {
+      setIsRejectDialogOpen(false);
+      setRejectReason("");
       await queryClient.invalidateQueries({ queryKey: ["decision", decision.id] });
       await queryClient.invalidateQueries({ queryKey: ["decisions"] });
       await queryClient.invalidateQueries({ queryKey: ["stats"] });
@@ -51,12 +56,12 @@ function PendingDecisionEditor({ decision }: { decision: DecisionMemory }) {
   });
 
   const isBusy = saveMutation.isPending || approveMutation.isPending || rejectMutation.isPending;
-  const actionError = saveMutation.error ?? approveMutation.error ?? rejectMutation.error;
+  const actionError = saveMutation.error ?? approveMutation.error;
   const helperMessage = saveMutation.isPending
     ? "Saving draft..."
     : saveMutation.isSuccess && !isDirty
-      ? "Draft saved. This decision stays pending until you approve or reject it."
-      : "Save draft keeps this decision pending until you approve or reject it.";
+      ? "Draft saved. This decision is still pending."
+      : "Save changes without approving this decision.";
 
   function updateDraftField(
     field: "decision" | "reason" | "alternative" | "impact",
@@ -96,32 +101,47 @@ function PendingDecisionEditor({ decision }: { decision: DecisionMemory }) {
           </div>
         </div>
         {canReview ? (
-          <div className="flex flex-wrap gap-2">
+          <div className="grid w-full grid-cols-2 gap-2 sm:flex sm:w-auto sm:flex-nowrap sm:justify-end">
             <button
               type="button"
               onClick={() => saveMutation.mutate()}
               disabled={!isDirty || !hasRequiredFields || isBusy}
-              className="inline-flex min-h-9 items-center gap-2 rounded-md border border-neutral-200 px-3 py-2 text-sm font-medium text-neutral-700 transition hover:bg-neutral-50 disabled:text-neutral-400"
+              className="order-2 inline-flex min-h-9 items-center justify-center gap-2 whitespace-nowrap rounded-md border border-neutral-200 px-3 py-2 text-sm font-medium text-neutral-700 transition hover:bg-neutral-50 disabled:text-neutral-400 sm:order-1"
               title="Save draft without approving"
             >
-              <Save className="size-4" aria-hidden="true" />
-              {saveMutation.isSuccess && !isDirty ? "Saved" : "Save draft"}
+              {saveMutation.isPending ? (
+                <Loader2 className="size-4 animate-spin" aria-hidden="true" />
+              ) : (
+                <Save className="size-4" aria-hidden="true" />
+              )}
+              {saveMutation.isPending
+                ? "Saving..."
+                : saveMutation.isSuccess && !isDirty
+                  ? "Saved"
+                  : "Save draft"}
             </button>
             <button
               type="button"
               onClick={() => approveMutation.mutate()}
               disabled={!hasRequiredFields || isBusy}
-              className="inline-flex min-h-9 items-center gap-2 rounded-md bg-emerald-600 px-3 py-2 text-sm font-semibold text-white transition hover:bg-emerald-700 disabled:bg-emerald-300"
+              className="order-1 col-span-2 inline-flex min-h-9 items-center justify-center gap-2 whitespace-nowrap rounded-md bg-emerald-600 px-3 py-2 text-sm font-semibold text-white transition hover:bg-emerald-700 disabled:bg-emerald-300 sm:order-2 sm:col-auto"
               title="Approve pending decision"
             >
-              <Check className="size-4" aria-hidden="true" />
-              Approve
+              {approveMutation.isPending ? (
+                <Loader2 className="size-4 animate-spin" aria-hidden="true" />
+              ) : (
+                <Check className="size-4" aria-hidden="true" />
+              )}
+              {approveMutation.isPending ? "Approving..." : "Approve"}
             </button>
             <button
               type="button"
-              onClick={() => rejectMutation.mutate()}
+              onClick={() => {
+                rejectMutation.reset();
+                setIsRejectDialogOpen(true);
+              }}
               disabled={isBusy}
-              className="inline-flex min-h-9 items-center gap-2 rounded-md border border-neutral-200 px-3 py-2 text-sm font-medium text-neutral-700 transition hover:bg-neutral-50 disabled:text-neutral-400"
+              className="order-3 inline-flex min-h-9 items-center justify-center gap-2 whitespace-nowrap rounded-md border border-red-200 px-3 py-2 text-sm font-medium text-red-700 transition hover:bg-red-50 disabled:border-neutral-200 disabled:text-neutral-400"
               title="Reject pending decision"
             >
               <X className="size-4" aria-hidden="true" />
@@ -208,6 +228,26 @@ function PendingDecisionEditor({ decision }: { decision: DecisionMemory }) {
           </div>
         </dl>
       )}
+      <ReviewReasonDialog
+        open={isRejectDialogOpen}
+        title="Reject decision"
+        description="The decision will remain available in the audit history."
+        label="Reason for rejection"
+        placeholder="Why should this decision not become permanent memory?"
+        value={rejectReason}
+        confirmLabel="Reject decision"
+        pendingLabel="Rejecting..."
+        destructive
+        isPending={rejectMutation.isPending}
+        error={rejectMutation.error}
+        onChange={setRejectReason}
+        onClose={() => {
+          setIsRejectDialogOpen(false);
+          setRejectReason("");
+          rejectMutation.reset();
+        }}
+        onConfirm={() => rejectMutation.mutate()}
+      />
     </article>
   );
 }
@@ -221,16 +261,19 @@ export default function PendingPage() {
   return (
     <div className="space-y-5">
       <section>
-        <h1 className="text-2xl font-semibold text-neutral-950">Pending decisions</h1>
+        <h1 className="text-2xl font-semibold text-neutral-950">Review queue</h1>
         <p className="mt-2 max-w-3xl text-sm leading-6 text-neutral-600">
-          Low-confidence extractions wait here until the author or reviewer confirms the final memory.
+          Decisions that need human confirmation before becoming permanent memory.
         </p>
       </section>
 
       {pendingQuery.isLoading ? <LoadingState label="Loading pending decisions" /> : null}
       {pendingQuery.error ? <ErrorState message={pendingQuery.error.message} /> : null}
       {pendingQuery.data?.decisions.length === 0 ? (
-        <EmptyState title="No pending decisions" description="Low-confidence extractions will appear here for review." />
+        <EmptyState
+          title="No decisions need review"
+          description="New captures that require confirmation will appear here."
+        />
       ) : null}
       {pendingQuery.data?.decisions.length ? (
         <section className="space-y-3">

@@ -1,6 +1,6 @@
 "use client";
 
-import { AlertCircle, ArrowRight, Github, Inbox, Loader2, ShieldCheck } from "lucide-react";
+import { AlertCircle, ArrowRight, Github, Inbox, Loader2 } from "lucide-react";
 import { usePathname } from "next/navigation";
 import { authLoginUrl } from "../../lib/api";
 
@@ -21,29 +21,22 @@ export function ErrorState({ message }: { message: string }) {
 
   if (isAuthRequired) {
     return (
-      <div className="flex min-h-[22rem] items-center justify-center rounded-md border border-neutral-200 bg-white px-6 py-12 text-center shadow-sm">
-        <div className="max-w-lg">
-          <div className="mx-auto mb-5 flex size-12 items-center justify-center rounded-md bg-neutral-950 text-white">
-            <ShieldCheck className="size-6" aria-hidden="true" />
-          </div>
-          <p className="text-lg font-semibold text-neutral-950">Sign in to view DecisionCapture</p>
+      <div className="flex justify-center pt-8 sm:pt-12">
+        <div className="w-full max-w-md rounded-md border border-neutral-200 bg-white p-5 shadow-sm">
+          <h2 className="text-xl font-semibold text-neutral-950">Access engineering memory</h2>
           <p className="mt-2 text-sm leading-6 text-neutral-600">
-            Dashboard data is protected by GitHub OAuth. Sign in to explore captured engineering
-            decisions.
+            Use GitHub to view decisions captured from merged pull requests.
           </p>
-          <div className="mt-6 flex justify-center">
+          <div className="mt-5">
             <a
               href={authLoginUrl(pathname)}
-              className="inline-flex min-h-10 items-center gap-2 rounded-md bg-neutral-950 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-neutral-800"
+              className="inline-flex min-h-10 w-full items-center justify-center gap-2 rounded-md bg-neutral-950 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-neutral-800"
             >
               <Github className="size-4" aria-hidden="true" />
-              Sign in with GitHub
+              Continue with GitHub
               <ArrowRight className="size-4" aria-hidden="true" />
             </a>
           </div>
-          <p className="mt-4 text-xs text-neutral-500">
-            Review actions remain limited by role and PR participation.
-          </p>
         </div>
       </div>
     );

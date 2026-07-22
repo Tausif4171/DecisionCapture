@@ -8,7 +8,7 @@ import { AuthStatusControl } from "./auth-status";
 const navItems = [
   { href: "/", label: "Dashboard", icon: DatabaseZap },
   { href: "/decisions", label: "Decisions", icon: SearchCheck },
-  { href: "/pending", label: "Pending", icon: GitPullRequestArrow }
+  { href: "/pending", label: "Review queue", icon: GitPullRequestArrow }
 ];
 
 function isActivePath(pathname: string, href: string) {
@@ -58,4 +58,3 @@ export function AppHeader() {
     </header>
   );
 }
-

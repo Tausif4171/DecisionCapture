@@ -7,6 +7,7 @@ import { analyzeOrQueue } from "../queue/service.js";
 import { processDecisionContext, syncDecisionNotificationFromStoredContext } from "./processor.js";
 import { decisionService } from "./service.js";
 import {
+  decisionRejectSchema,
   decisionReopenSchema,
   decisionReviewSchema,
   decisionSearchSchema,
@@ -78,7 +79,8 @@ export async function approveDecision(request: Request, response: Response) {
 }
 
 export async function rejectDecision(request: Request, response: Response) {
-  const decision = await decisionService.rejectDecision(decisionId(request), reviewActor(request));
+  const input = decisionRejectSchema.parse(request.body ?? {});
+  const decision = await decisionService.rejectDecision(decisionId(request), input, reviewActor(request));
   await syncDecisionNotificationFromStoredContext(decision);
   return response.json(decision);
 }

@@ -45,3 +45,7 @@ export const decisionReviewSchema = z.object({
 export const decisionReopenSchema = z.object({
   reason: z.string().trim().min(10).max(500)
 });
+
+export const decisionRejectSchema = z.object({
+  reason: z.string().trim().min(10).max(500).optional()
+});

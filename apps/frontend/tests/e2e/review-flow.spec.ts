@@ -150,12 +150,12 @@ test("pending review can be saved as draft and approved separately", async ({ pa
   await expect(pendingCard.getByRole("button", { name: "Save draft" })).toBeEnabled();
 
   await pendingCard.getByRole("button", { name: "Save draft" }).click();
-  await expect(pendingCard.getByText("Draft saved. This decision stays pending until you approve or reject it.")).toBeVisible();
+  await expect(pendingCard.getByText("Draft saved. This decision is still pending.")).toBeVisible();
 
   await pendingCard.getByRole("button", { name: "Approve" }).click();
 
   await page.goto(`/decisions/${seededDecision.id}`);
-  await expect(page.getByText("Approved decisions are locked so the final engineering memory stays auditable.")).toBeVisible();
+  await expect(page.getByText("Approved decisions are locked to preserve an auditable record.")).toBeVisible();
   await expect(page.getByRole("button", { name: "Edit" })).toHaveCount(0);
   await expect(page.getByRole("button", { name: "Approve" })).toHaveCount(0);
   await expect(page.getByRole("button", { name: "Reject" })).toHaveCount(0);
@@ -171,10 +171,61 @@ test("pending review can be saved as draft and approved separately", async ({ pa
   await expect(page.getByText("apps/backend/src/modules/e2e/ninth.ts", { exact: true })).toHaveCount(0);
 
   await page.getByRole("button", { name: "Reopen review" }).click();
-  await page.getByLabel("Reason").fill("New evidence requires another decision review.");
-  await page.getByRole("button", { name: "Reopen", exact: true }).click();
+  const reopenDialog = page.getByRole("dialog", { name: "Reopen review" });
+  await reopenDialog.getByLabel("Reason for reopening").fill("New evidence requires another decision review.");
+  await reopenDialog.getByRole("button", { name: "Reopen review" }).click();
 
   await expect(page.getByText("Pending", { exact: true })).toBeVisible();
   await expect(page.getByText("Review reopened by DecisionCapture")).toBeVisible();
   await expect(page.getByText("New evidence requires another decision review.")).toBeVisible();
+});
+
+test("rejection requires a reason and records it in audit history", async ({ page }) => {
+  const seededDecision = await seedPendingDecision();
+  const rejectionReason = "This extraction is implementation detail rather than a durable decision.";
+
+  await page.goto("/pending");
+
+  const pendingCard = page.getByTestId(`pending-decision-${seededDecision.id}`);
+  await pendingCard.getByRole("button", { name: "Reject" }).click();
+
+  const rejectDialog = page.getByRole("dialog", { name: "Reject decision" });
+  const confirmButton = rejectDialog.getByRole("button", { name: "Reject decision" });
+
+  await expect(confirmButton).toBeDisabled();
+  await rejectDialog.getByLabel("Reason for rejection").fill("Too short");
+  await expect(confirmButton).toBeDisabled();
+  await rejectDialog.getByLabel("Reason for rejection").fill(rejectionReason);
+  await expect(confirmButton).toBeEnabled();
+  await confirmButton.click();
+
+  await expect(pendingCard).toHaveCount(0);
+  await page.goto(`/decisions/${seededDecision.id}`);
+  await expect(page.getByText("Rejected", { exact: true })).toBeVisible();
+  await expect(page.getByText(rejectionReason)).toBeVisible();
+});
+
+test("decision search uses URL-backed automatic filters", async ({ page }) => {
+  const seededDecision = await seedPendingDecision();
+
+  await page.goto("/decisions");
+
+  await expect(page.getByRole("button", { name: "Apply" })).toHaveCount(0);
+  await page.getByPlaceholder("Search decisions...").fill("BullMQ");
+  await expect.poll(() => new URL(page.url()).searchParams.get("q")).toBe("BullMQ");
+  await expect(page.getByRole("heading", { name: seededDecision.decision }).first()).toBeVisible();
+
+  await page.getByRole("button", { name: "Filter status" }).click();
+  await page.getByRole("option", { name: "Pending" }).click();
+  await expect.poll(() => new URL(page.url()).searchParams.get("status")).toBe("PENDING");
+
+  await page.getByRole("button", { name: "Sort decisions" }).click();
+  await page.getByRole("option", { name: "Highest confidence" }).click();
+  await expect.poll(() => new URL(page.url()).searchParams.get("sort")).toBe("confidence");
+
+  await page.getByRole("button", { name: "Clear search" }).click();
+  await expect.poll(() => new URL(page.url()).searchParams.get("q")).toBeNull();
+
+  await page.getByRole("button", { name: "Clear filters" }).click();
+  await expect.poll(() => new URL(page.url()).search).toBe("");
 });
