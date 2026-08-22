@@ -2,6 +2,14 @@ export type DecisionStatus = "APPROVED" | "PENDING" | "REJECTED";
 export type UserRole = "ADMIN" | "MAINTAINER" | "REVIEWER" | "VIEWER";
 export type DecisionAuditAction = "CREATED" | "EDITED" | "APPROVED" | "REJECTED" | "REOPENED";
 export type DecisionExtractionMethod = "OLLAMA" | "STRUCTURED_FALLBACK" | "UNKNOWN";
+export type ContextProvider = "GITHUB" | "LINEAR" | "JIRA" | "GENERIC";
+export type ExternalContextType = "ISSUE" | "ADR" | "ARCHITECTURE_DOC" | "MEETING";
+export type ExternalContextStatus = "ACTIVE" | "UNAVAILABLE";
+export type DecisionContextRelationshipType =
+  | "RELATED"
+  | "ORIGINATED_FROM"
+  | "DOCUMENTS"
+  | "DISCUSSED_IN";
 export type DecisionReviewReason =
   | "MISSING_EXPLANATION"
   | "STRUCTURED_FALLBACK"
@@ -98,6 +106,45 @@ export interface DecisionAuditEntry {
   actorLogin?: string | null;
   note?: string | null;
   createdAt: string;
+}
+
+export interface ExternalContext {
+  id: string;
+  provider: ContextProvider;
+  type: ExternalContextType;
+  providerAccountId: string;
+  externalId: string;
+  url: string;
+  normalizedUrl: string;
+  title?: string | null;
+  description?: string | null;
+  status: ExternalContextStatus;
+  metadata?: Record<string, unknown> | null;
+  lastSyncedAt?: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface DecisionContextLink {
+  id: string;
+  decisionId: string;
+  externalContextId: string;
+  relationshipType: DecisionContextRelationshipType;
+  createdByLogin?: string | null;
+  createdAt: string;
+  updatedAt: string;
+  context: ExternalContext;
+}
+
+export interface ContextUrlResolution {
+  provider: ContextProvider;
+  type: ExternalContextType;
+  providerAccountId: string;
+  externalId: string;
+  url: string;
+  normalizedUrl: string;
+  title?: string | null;
+  metadata?: Record<string, unknown> | null;
 }
 
 export interface PRRecord {

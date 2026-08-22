@@ -10,7 +10,7 @@
     "dev": "npm run build -w @decisioncapture/shared && concurrently \"npm run dev -w @decisioncapture/backend\" \"npm run dev -w @decisioncapture/frontend\"",
     "build": "npm run build -ws --if-present",
     "lint": "npm run lint -ws --if-present",
-    "typecheck": "npm run typecheck -ws --if-present",
+    "typecheck": "npm run build -w @decisioncapture/shared && npm run typecheck -ws --if-present",
     "test": "npm run test -w @decisioncapture/backend",
     "test:e2e": "npm run test:e2e -w @decisioncapture/frontend",
     "ollama:proxy": "node scripts/ollama-ngrok-proxy.mjs",

@@ -2,9 +2,12 @@ import type {
   AnalyzeResponse,
   AuthStatus,
   DecisionAuditEntry,
+  DecisionContextLink,
+  DecisionContextRelationshipType,
   DecisionListResponse,
   DecisionMemory,
-  DecisionStats
+  DecisionStats,
+  ExternalContextType
 } from "@decisioncapture/shared";
 import type { DecisionReviewDraft } from "./decision-review";
 
@@ -102,6 +105,30 @@ export function getDecision(id: string) {
 
 export function listDecisionAudit(id: string) {
   return request<DecisionAuditEntry[]>(`/decisions/${id}/audit`);
+}
+
+export function listDecisionContexts(id: string) {
+  return request<DecisionContextLink[]>(`/decisions/${id}/contexts`);
+}
+
+export function createDecisionContextLink(
+  id: string,
+  body: {
+    url: string;
+    relationshipType: DecisionContextRelationshipType;
+    type: ExternalContextType;
+  }
+) {
+  return request<DecisionContextLink>(`/decisions/${id}/contexts`, {
+    method: "POST",
+    body: JSON.stringify(body)
+  });
+}
+
+export function deleteDecisionContextLink(id: string, contextId: string) {
+  return request<void>(`/decisions/${id}/contexts/${contextId}`, {
+    method: "DELETE"
+  });
 }
 
 export function getAuthStatus() {
