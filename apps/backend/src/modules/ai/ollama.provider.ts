@@ -5,6 +5,7 @@ import { logger } from "../../config/logger.js";
 import { MISSING_REASON } from "../decisions/evidence.js";
 import { resolvePrimaryCategory } from "../decisions/scoring.js";
 import type { AIProvider } from "./provider.js";
+import { confidenceForStructuredSections, extractStructuredSections } from "./structured-sections.js";
 
 export function normalizeOllamaConfidence(value: unknown) {
   if (typeof value === "number") {
@@ -250,9 +251,18 @@ export class OllamaAIProvider implements AIProvider {
 
       const payload = (await response.json()) as { response?: string };
       const parsed = extractedDecisionSchema.parse(extractJson(payload.response ?? ""));
+      const structuredSections = extractStructuredSections(context);
+      const hasStructuredSections = Object.values(structuredSections).some(Boolean);
 
       return {
         ...parsed,
+        decision: structuredSections.decision ?? parsed.decision,
+        reason: structuredSections.reason ?? parsed.reason,
+        alternative: structuredSections.alternative ?? parsed.alternative,
+        impact: structuredSections.impact ?? parsed.impact,
+        confidence: hasStructuredSections
+          ? Math.max(parsed.confidence, confidenceForStructuredSections(structuredSections))
+          : parsed.confidence,
         category: resolvePrimaryCategory(context, score),
         author: context.author,
         source: `PR #${context.prNumber}`,

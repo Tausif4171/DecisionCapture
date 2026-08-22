@@ -1,11 +1,12 @@
 import type { DecisionScore, PRContext } from "@decisioncapture/shared";
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { HeuristicAIProvider } from "../src/modules/ai/heuristic.provider.js";
 import {
   buildOllamaPrompt,
   isOllamaModelAvailable,
   normalizeOllamaConfidence
 } from "../src/modules/ai/ollama.provider.js";
+import { OllamaAIProvider } from "../src/modules/ai/ollama.provider.js";
 
 const score: DecisionScore = {
   score: 75,
@@ -14,6 +15,10 @@ const score: DecisionScore = {
   categories: ["architecture"],
   reasons: ["Architecture terms found"]
 };
+
+afterEach(() => {
+  vi.unstubAllGlobals();
+});
 
 function context(overrides: Partial<PRContext> = {}): PRContext {
   return {
@@ -92,6 +97,40 @@ describe("buildOllamaPrompt", () => {
     expect(prompt).toContain("more omitted");
     expect(prompt).toContain("[truncated]");
     expect(prompt.length).toBeLessThan(15_000);
+  });
+});
+
+describe("OllamaAIProvider", () => {
+  it("preserves explicit PR sections when the model returns conflicting fields", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () =>
+        new Response(
+          JSON.stringify({
+            response: JSON.stringify({
+              decision: "Build a GitHub-only integration first with provider-specific fields.",
+              reason: "The PR context did not state an explicit reason.",
+              alternative: "Use provider-specific tables.",
+              impact: "The implementation is easier to ship.",
+              confidence: 0.49,
+              category: "architecture"
+            })
+          }),
+          { status: 200, headers: { "content-type": "application/json" } }
+        )
+      )
+    );
+
+    const extracted = await new OllamaAIProvider().extractDecision(context(), score);
+
+    expect(extracted).toMatchObject({
+      decision: "Use the shared privileged role policy for decision review authorization.",
+      reason:
+        "Admin, maintainer, and reviewer access should be defined in one place so permission rules remain consistent.",
+      alternative: "Keep a separate hardcoded role list inside DecisionService.",
+      impact: "RBAC rules become easier to maintain and less likely to drift across authorization paths.",
+      confidence: 0.65
+    });
   });
 });
 
