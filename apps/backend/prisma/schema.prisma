@@ -34,6 +34,53 @@ enum DecisionExtractionMethod {
   STRUCTURED_FALLBACK
 }
 
+enum ContextProvider {
+  GITHUB
+  LINEAR
+  JIRA
+  GENERIC
+}
+
+enum ExternalContextType {
+  ISSUE
+  ADR
+  ARCHITECTURE_DOC
+  MEETING
+}
+
+enum ExternalContextStatus {
+  ACTIVE
+  UNAVAILABLE
+}
+
+enum DecisionContextRelationshipType {
+  RELATED
+  ORIGINATED_FROM
+  DOCUMENTS
+  DISCUSSED_IN
+}
+
+enum ProviderConnectionStatus {
+  ACTIVE
+  DISCONNECTED
+  ERROR
+}
+
+enum WebhookEventStatus {
+  RECEIVED
+  QUEUED
+  PROCESSED
+  FAILED
+}
+
+enum ContextSyncStatus {
+  PENDING
+  SYNCING
+  SYNCED
+  FAILED
+  UNAVAILABLE
+}
+
 model AppUser {
   id                String              @id @default(cuid())
   githubId          String              @unique
@@ -47,6 +94,8 @@ model AppUser {
   rejectedDecisions DecisionMemory[]    @relation("RejectedDecisionUser")
   editedDecisions   DecisionMemory[]    @relation("EditedDecisionUser")
   auditLogs         DecisionAuditLog[]
+  createdContextLinks DecisionContextLink[]
+  providerConnections ProviderConnection[]
 
   @@index([role])
   @@map("app_users")
@@ -100,6 +149,7 @@ model DecisionMemory {
   createdAt   DateTime          @default(now())
   updatedAt   DateTime          @updatedAt
   auditLogs   DecisionAuditLog[]
+  contextLinks DecisionContextLink[]
 
   @@index([status])
   @@index([repository])
@@ -129,4 +179,102 @@ model DecisionAuditLog {
   @@index([action])
   @@index([createdAt])
   @@map("decision_audit_logs")
+}
+
+model ExternalContext {
+  id                String                @id @default(cuid())
+  provider          ContextProvider
+  type              ExternalContextType
+  providerAccountId String                @default("global")
+  externalId        String
+  url               String
+  normalizedUrl     String
+  title             String?
+  description       String?
+  status            ExternalContextStatus @default(ACTIVE)
+  metadata          Json?
+  lastSyncedAt      DateTime?
+  createdAt         DateTime              @default(now())
+  updatedAt         DateTime              @updatedAt
+  decisionLinks     DecisionContextLink[]
+  syncState         ContextSync?
+
+  @@unique([provider, providerAccountId, externalId])
+  @@index([provider, type])
+  @@index([status])
+  @@index([normalizedUrl])
+  @@map("external_contexts")
+}
+
+model DecisionContextLink {
+  id                String                          @id @default(cuid())
+  decisionId        String
+  decision          DecisionMemory                  @relation(fields: [decisionId], references: [id], onDelete: Cascade)
+  externalContextId String
+  externalContext   ExternalContext                 @relation(fields: [externalContextId], references: [id], onDelete: Restrict)
+  relationshipType  DecisionContextRelationshipType @default(RELATED)
+  createdByUserId   String?
+  createdBy         AppUser?                        @relation(fields: [createdByUserId], references: [id], onDelete: SetNull)
+  createdByLogin    String?
+  createdAt         DateTime                        @default(now())
+  updatedAt         DateTime                        @updatedAt
+
+  @@unique([decisionId, externalContextId])
+  @@index([externalContextId])
+  @@index([createdByUserId])
+  @@index([relationshipType])
+  @@map("decision_context_links")
+}
+
+model ProviderConnection {
+  id                    String                   @id @default(cuid())
+  provider              ContextProvider
+  providerAccountId     String                   @default("global")
+  encryptedAccessToken  String?
+  encryptedRefreshToken String?
+  expiresAt             DateTime?
+  scopes                String[]                 @default([])
+  status                ProviderConnectionStatus @default(ACTIVE)
+  metadata              Json?
+  createdByUserId       String?
+  createdBy             AppUser?                 @relation(fields: [createdByUserId], references: [id], onDelete: SetNull)
+  createdAt             DateTime                 @default(now())
+  updatedAt             DateTime                 @updatedAt
+
+  @@unique([provider, providerAccountId])
+  @@index([status])
+  @@index([createdByUserId])
+  @@map("provider_connections")
+}
+
+model WebhookEvent {
+  id                 String             @id @default(cuid())
+  provider           ContextProvider
+  externalDeliveryId String
+  eventType          String
+  payload            Json
+  status             WebhookEventStatus @default(RECEIVED)
+  attempts           Int                @default(0)
+  receivedAt         DateTime           @default(now())
+  processedAt        DateTime?
+  lastError          String?
+
+  @@unique([provider, externalDeliveryId])
+  @@index([status, receivedAt])
+  @@map("webhook_events")
+}
+
+model ContextSync {
+  id            String            @id @default(cuid())
+  contextId     String            @unique
+  context       ExternalContext   @relation(fields: [contextId], references: [id], onDelete: Cascade)
+  status        ContextSyncStatus @default(PENDING)
+  lastAttemptAt DateTime?
+  lastSuccessAt DateTime?
+  error         String?
+  createdAt     DateTime          @default(now())
+  updatedAt     DateTime          @updatedAt
+
+  @@index([status])
+  @@map("context_syncs")
 }

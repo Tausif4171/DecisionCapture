@@ -2,6 +2,7 @@ import { Router } from "express";
 import { env } from "./config/env.js";
 import { asyncHandler } from "./middleware/async-handler.js";
 import { authRouter } from "./modules/auth/routes.js";
+import { contextsRouter } from "./modules/contexts/routes.js";
 import { decisionsRouter } from "./modules/decisions/routes.js";
 import { demoRouter } from "./modules/demo/routes.js";
 import { githubRouter } from "./modules/github/routes.js";
@@ -32,6 +33,7 @@ router.get(
 );
 
 router.use("/auth", authRouter);
+router.use("/contexts", contextsRouter);
 router.use("/github", githubRouter);
 router.use("/decisions", decisionsRouter);
 router.use("/demo", demoRouter);

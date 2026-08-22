@@ -1,8 +1,14 @@
 "use client";
 
-import { useState } from "react";
+import { useState, type FormEvent } from "react";
 import { useParams } from "next/navigation";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import type {
+  DecisionContextLink,
+  DecisionContextRelationshipType,
+  ExternalContextStatus,
+  ExternalContextType
+} from "@decisioncapture/shared";
 import {
   Check,
   ChevronDown,
@@ -10,18 +16,23 @@ import {
   ExternalLink,
   GitBranch,
   History,
+  Link as LinkIcon,
   Loader2,
   PencilLine,
   RotateCcw,
   Save,
   ShieldCheck,
   Sparkles,
+  Trash2,
   UserRound,
   X
 } from "lucide-react";
 import {
   approveDecision,
+  createDecisionContextLink,
+  deleteDecisionContextLink,
   getDecision,
+  listDecisionContexts,
   listDecisionAudit,
   rejectDecision,
   reopenDecision,
@@ -41,10 +52,23 @@ import { useProtectedPageAccess } from "../../components/protected-page-access";
 import { ErrorState, LoadingState } from "../../components/state-views";
 import { ReviewReasonCallout } from "../../components/review-reason";
 import { ReviewReasonDialog } from "../../components/review-reason-dialog";
+import { SelectMenu } from "../../components/select-menu";
 import { StatusBadge } from "../../components/status-badge";
 
 const FILE_PREVIEW_LIMIT = 8;
 const AUDIT_PREVIEW_LIMIT = 6;
+const CONTEXT_TYPE_OPTIONS = [
+  { value: "ARCHITECTURE_DOC", label: "Architecture doc" },
+  { value: "ADR", label: "ADR" },
+  { value: "ISSUE", label: "Issue" },
+  { value: "MEETING", label: "Meeting" }
+];
+const RELATIONSHIP_OPTIONS = [
+  { value: "RELATED", label: "Related" },
+  { value: "ORIGINATED_FROM", label: "Originated from" },
+  { value: "DOCUMENTS", label: "Documents" },
+  { value: "DISCUSSED_IN", label: "Discussed in" }
+];
 
 function Field({ label, value }: { label: string; value: string }) {
   return (
@@ -77,6 +101,36 @@ function formatAuditDate(value: string) {
   }).format(new Date(value));
 }
 
+function formatContextType(type: ExternalContextType) {
+  const labels: Record<ExternalContextType, string> = {
+    ISSUE: "Issue",
+    ADR: "ADR",
+    ARCHITECTURE_DOC: "Architecture doc",
+    MEETING: "Meeting"
+  };
+
+  return labels[type];
+}
+
+function formatRelationship(type: DecisionContextRelationshipType) {
+  const labels: Record<DecisionContextRelationshipType, string> = {
+    RELATED: "Related",
+    ORIGINATED_FROM: "Originated from",
+    DOCUMENTS: "Documents",
+    DISCUSSED_IN: "Discussed in"
+  };
+
+  return labels[type];
+}
+
+function formatContextStatus(status: ExternalContextStatus) {
+  return status === "UNAVAILABLE" ? "Unavailable" : "Active";
+}
+
+function contextTitle(link: DecisionContextLink) {
+  return link.context.title ?? link.context.normalizedUrl;
+}
+
 export default function DecisionDetailPage() {
   const params = useParams<{ id: string }>();
   const queryClient = useQueryClient();
@@ -89,6 +143,10 @@ export default function DecisionDetailPage() {
   const [rejectReason, setRejectReason] = useState("");
   const [showAllFiles, setShowAllFiles] = useState(false);
   const [showAllAudit, setShowAllAudit] = useState(false);
+  const [contextUrl, setContextUrl] = useState("");
+  const [contextType, setContextType] = useState<ExternalContextType>("ARCHITECTURE_DOC");
+  const [contextRelationship, setContextRelationship] =
+    useState<DecisionContextRelationshipType>("RELATED");
 
   const decisionQuery = useQuery({
     queryKey: ["decision", params.id],
@@ -99,6 +157,11 @@ export default function DecisionDetailPage() {
   const auditQuery = useQuery({
     queryKey: ["decision-audit", params.id],
     queryFn: () => listDecisionAudit(params.id),
+    enabled: access.canLoadProtectedData && Boolean(decisionQuery.data)
+  });
+  const contextsQuery = useQuery({
+    queryKey: ["decision-contexts", params.id],
+    queryFn: () => listDecisionContexts(params.id),
     enabled: access.canLoadProtectedData && Boolean(decisionQuery.data)
   });
   const authQuery = access.authQuery;
@@ -163,11 +226,32 @@ export default function DecisionDetailPage() {
     }
   });
 
+  const createContextMutation = useMutation({
+    mutationFn: () =>
+      createDecisionContextLink(params.id, {
+        url: contextUrl.trim(),
+        relationshipType: contextRelationship,
+        type: contextType
+      }),
+    onSuccess: async () => {
+      setContextUrl("");
+      await queryClient.invalidateQueries({ queryKey: ["decision-contexts", params.id] });
+    }
+  });
+
+  const deleteContextMutation = useMutation({
+    mutationFn: (contextId: string) => deleteDecisionContextLink(params.id, contextId),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ["decision-contexts", params.id] });
+    }
+  });
+
   const isBusy =
     updateMutation.isPending ||
     approveMutation.isPending ||
     rejectMutation.isPending ||
     reopenMutation.isPending;
+  const isContextBusy = createContextMutation.isPending || deleteContextMutation.isPending;
   const actionError = updateMutation.error ?? approveMutation.error;
 
   function startEditing() {
@@ -199,6 +283,16 @@ export default function DecisionDetailPage() {
     setDraft((current) => (current ? { ...current, [field]: value } : current));
   }
 
+  function submitContextLink(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+
+    if (!contextUrl.trim() || createContextMutation.isPending) {
+      return;
+    }
+
+    createContextMutation.mutate();
+  }
+
   if (access.gate) {
     return access.gate;
   }
@@ -218,6 +312,10 @@ export default function DecisionDetailPage() {
   const auditEntries = auditQuery.data ?? [];
   const visibleAudit = showAllAudit ? auditEntries : auditEntries.slice(0, AUDIT_PREVIEW_LIMIT);
   const hasMoreAudit = auditEntries.length > AUDIT_PREVIEW_LIMIT;
+  const contextLinks = contextsQuery.data ?? [];
+  const canManageContexts = Boolean(
+    decision.reviewPermissions?.canReview || decision.reviewPermissions?.canReopen
+  );
 
   return (
     <div className="space-y-5">
@@ -410,6 +508,116 @@ export default function DecisionDetailPage() {
               <ExternalLink className="size-4" aria-hidden="true" />
               Open PR
             </a>
+          </div>
+          <div className="border-t border-neutral-100 pt-4">
+            <div className="mb-3 flex items-center gap-2 text-sm font-semibold text-neutral-950">
+              <LinkIcon className="size-4 text-neutral-500" aria-hidden="true" />
+              Linked context
+            </div>
+            {contextsQuery.isLoading ? (
+              <p className="text-xs text-neutral-500">Loading context...</p>
+            ) : contextLinks.length ? (
+              <ul className="space-y-2">
+                {contextLinks.map((link) => (
+                  <li key={link.id} className="rounded-md border border-neutral-100 px-2 py-2">
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="min-w-0">
+                        <a
+                          href={link.context.url}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="block truncate text-sm font-medium text-neutral-900 hover:text-emerald-700"
+                        >
+                          {contextTitle(link)}
+                        </a>
+                        <p className="mt-1 text-xs text-neutral-500">
+                          {formatContextType(link.context.type)} - {formatRelationship(link.relationshipType)}
+                        </p>
+                      </div>
+                      <div className="flex shrink-0 items-center gap-1">
+                        <span
+                          className={`rounded px-1.5 py-1 text-[11px] font-semibold ${
+                            link.context.status === "UNAVAILABLE"
+                              ? "bg-red-50 text-red-700"
+                              : "bg-emerald-50 text-emerald-700"
+                          }`}
+                        >
+                          {formatContextStatus(link.context.status)}
+                        </span>
+                        {canManageContexts ? (
+                          <button
+                            type="button"
+                            onClick={() => deleteContextMutation.mutate(link.externalContextId)}
+                            disabled={isContextBusy}
+                            className="inline-flex size-8 items-center justify-center rounded-md text-neutral-400 hover:bg-red-50 hover:text-red-700 disabled:text-neutral-300"
+                            title="Remove context link"
+                            aria-label={`Remove context link ${contextTitle(link)}`}
+                          >
+                            <Trash2 className="size-4" aria-hidden="true" />
+                          </button>
+                        ) : null}
+                      </div>
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <p className="text-xs text-neutral-500">No context linked.</p>
+            )}
+            {contextsQuery.error instanceof Error ? (
+              <p className="mt-2 text-xs text-red-600">{contextsQuery.error.message}</p>
+            ) : null}
+            {canManageContexts ? (
+              <form className="mt-3 space-y-2" onSubmit={submitContextLink}>
+                <label className="block">
+                  <span className="sr-only">Context URL</span>
+                  <input
+                    value={contextUrl}
+                    onChange={(event) => {
+                      createContextMutation.reset();
+                      setContextUrl(event.target.value);
+                    }}
+                    placeholder="https://github.com/org/repo/issues/42"
+                    className="min-h-10 w-full rounded-md border border-neutral-200 px-3 text-sm outline-none transition focus:border-neutral-400"
+                  />
+                </label>
+                <div className="grid gap-2 sm:grid-cols-2">
+                  <SelectMenu
+                    label="Context type"
+                    value={contextType}
+                    options={CONTEXT_TYPE_OPTIONS}
+                    onChange={(value) => setContextType(value as ExternalContextType)}
+                  />
+                  <SelectMenu
+                    label="Relationship type"
+                    value={contextRelationship}
+                    options={RELATIONSHIP_OPTIONS}
+                    onChange={(value) =>
+                      setContextRelationship(value as DecisionContextRelationshipType)
+                    }
+                  />
+                </div>
+                <button
+                  type="submit"
+                  disabled={!contextUrl.trim() || createContextMutation.isPending}
+                  className="inline-flex min-h-10 w-full items-center justify-center gap-2 rounded-md border border-neutral-200 px-3 text-sm font-medium text-neutral-700 transition hover:bg-neutral-50 disabled:text-neutral-400"
+                  title="Link context"
+                >
+                  {createContextMutation.isPending ? (
+                    <Loader2 className="size-4 animate-spin" aria-hidden="true" />
+                  ) : (
+                    <LinkIcon className="size-4" aria-hidden="true" />
+                  )}
+                  {createContextMutation.isPending ? "Linking..." : "Link context"}
+                </button>
+                {createContextMutation.error instanceof Error ? (
+                  <p className="text-xs text-red-600">{createContextMutation.error.message}</p>
+                ) : null}
+                {deleteContextMutation.error instanceof Error ? (
+                  <p className="text-xs text-red-600">{deleteContextMutation.error.message}</p>
+                ) : null}
+              </form>
+            ) : null}
           </div>
           <div className="border-t border-neutral-100 pt-4">
             <p className="mb-2 text-xs font-semibold uppercase tracking-normal text-neutral-500">Files changed</p>
