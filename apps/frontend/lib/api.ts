@@ -7,7 +7,10 @@ import type {
   DecisionListResponse,
   DecisionMemory,
   DecisionStats,
-  ExternalContextType
+  ExternalContextType,
+  GitHubConnectionStatus,
+  GitHubIssueSummary,
+  GitHubRepositorySummary
 } from "@decisioncapture/shared";
 import type { DecisionReviewDraft } from "./decision-review";
 
@@ -129,6 +132,32 @@ export function deleteDecisionContextLink(id: string, contextId: string) {
   return request<void>(`/decisions/${id}/contexts/${contextId}`, {
     method: "DELETE"
   });
+}
+
+export function refreshDecisionContext(id: string, contextId: string) {
+  return request<{ status: "queued" }>(`/decisions/${id}/contexts/${contextId}/refresh`, {
+    method: "POST"
+  });
+}
+
+export function getGitHubConnection() {
+  return request<GitHubConnectionStatus>("/contexts/providers/github/connection");
+}
+
+export function connectGitHub() {
+  return request<GitHubConnectionStatus>("/contexts/providers/github/connect", {
+    method: "POST"
+  });
+}
+
+export function listGitHubRepositories() {
+  return request<GitHubRepositorySummary[]>("/contexts/providers/github/repositories");
+}
+
+export function listGitHubIssues(repository: string, query = "") {
+  return request<GitHubIssueSummary[]>(
+    `/contexts/providers/github/issues${toSearchParams({ repository, query })}`
+  );
 }
 
 export function getAuthStatus() {

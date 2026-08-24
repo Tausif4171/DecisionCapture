@@ -12,7 +12,7 @@ export const DECISION_QUEUE_NAME = "decision-analysis";
 let queue: Queue<DecisionQueuePayload, DecisionQueueResult> | undefined;
 let worker: Worker<DecisionQueuePayload, DecisionQueueResult> | undefined;
 
-function redisConnectionOptions(): ConnectionOptions {
+export function redisConnectionOptions(): ConnectionOptions {
   const url = new URL(env.REDIS_URL);
 
   return {

@@ -19,6 +19,11 @@ export const resolveContextUrlSchema = z.object({
   type: externalContextTypeSchema.optional()
 });
 
+export const listGitHubIssuesSchema = z.object({
+  repository: z.string().trim().regex(/^[^/\s]+\/[^/\s]+$/, "Repository must use owner/repository"),
+  query: z.string().trim().max(200).optional().default("")
+});
+
 export const createDecisionContextLinkSchema = z
   .object({
     url: z.string().trim().url().max(2048).optional(),

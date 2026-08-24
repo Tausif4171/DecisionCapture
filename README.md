@@ -224,6 +224,12 @@ The response should show `"reachable": true` and `"modelAvailable": true`.
 - `PATCH /decisions/:id/approve` approves a pending decision and optional edits.
 - `PATCH /decisions/:id/reject` rejects a pending decision. The UI requires a rejection reason and stores it in the audit history.
 - `PATCH /decisions/:id/reopen` reopens an approved or rejected decision with a required audit reason. With GitHub auth enabled, only admins and maintainers may use it.
+- `GET/POST /decisions/:id/contexts` lists or creates external context links.
+- `DELETE /decisions/:id/contexts/:contextId` removes a decision-context relationship without deleting the shared external context.
+- `POST /decisions/:id/contexts/:contextId/refresh` queues a GitHub issue metadata refresh.
+- `GET /contexts/providers/github/connection` reports the configured GitHub App connection.
+- `POST /contexts/providers/github/connect` verifies and activates the configured GitHub App installation.
+- `GET /contexts/providers/github/repositories` and `/issues` power GitHub issue selection for administrators and maintainers.
 - `GET /auth/me` returns the current dashboard authentication state.
 - `GET /auth/github` starts GitHub OAuth login and `GET /auth/github/callback` completes it.
 - `POST /auth/logout` clears the dashboard session.
@@ -255,13 +261,21 @@ Configure backend environment variables for GitHub-owned enrichment and PR feedb
 - Fallback: `GITHUB_API_TOKEN`, a PAT with access to the repositories you want to analyze. Comments appear as the PAT owner.
 - `APP_BASE_URL`, the public dashboard URL used in PR review links
 
-For the GitHub App, grant repository metadata read access and pull requests read/write access, then install it on the repositories DecisionCapture should analyze. Keep OAuth App credentials for human dashboard sign-in separate from GitHub App credentials for backend automation.
+For the GitHub App, grant repository metadata read access, issues read access, and pull requests read/write access, then install it on the repositories DecisionCapture should analyze. Subscribe the app webhook to `pull_request`, `issues`, `issue_comment`, `installation`, and `installation_repositories`. Keep OAuth App credentials for human dashboard sign-in separate from GitHub App credentials for backend automation.
 
 The workflow collects PR metadata, a bounded diff summary, formal reviews, normal PR conversation comments, labels, approvals, and changed files, then sends that payload to `POST /decisions/analyze` without waiting for inline processing. The BullMQ worker owns analysis, author-tagged pending review comment creation, and later PR comment updates when a reviewer approves or rejects the decision from the dashboard.
 
 If you want to test this from a local machine, expose the backend with a tunnel and use that public URL as `DECISIONCAPTURE_API_URL`. Set `APP_BASE_URL` to a reachable dashboard URL if you want PR comments to contain clickable review links.
 
 For direct webhooks, set the GitHub webhook secret to match `GITHUB_WEBHOOK_SECRET`. With `GITHUB_API_TOKEN` configured, webhook-only ingestion fetches the same rich PR context the requirements call for instead of relying on the limited webhook payload alone.
+
+### GitHub Issue Context
+
+After the GitHub App credentials are configured, an administrator or maintainer connects the installation from a decision's Linked context panel. The issue selector reads only repositories granted to that installation. Existing manual URL linking remains available when the integration is disconnected.
+
+Linking a GitHub issue creates the relationship first and then synchronizes metadata through the existing Redis/BullMQ infrastructure. The synchronization stores title, description, state, labels, author, comment count, up to 100 recent comments, and the last successful sync time. A GitHub API or queue failure does not remove the relationship. Deleted or inaccessible issues become unavailable while retaining their last known metadata.
+
+GitHub installation access tokens are generated on the backend, cached only until shortly before expiry, and never stored in PostgreSQL or returned to the browser. Webhook deliveries are signature-verified and deduplicated by `X-GitHub-Delivery` before processing.
 
 ## Dashboard Auth and RBAC
 

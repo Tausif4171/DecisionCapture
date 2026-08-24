@@ -229,3 +229,32 @@ test("decision search uses URL-backed automatic filters", async ({ page }) => {
   await page.getByRole("button", { name: "Clear filters" }).click();
   await expect.poll(() => new URL(page.url()).search).toBe("");
 });
+
+test("manual GitHub context linking remains durable without a connected integration", async ({ page }) => {
+  const seededDecision = await seedPendingDecision();
+  const issueNumber = 800000 + Math.floor(Date.now() % 100000);
+  const issueUrl = `https://github.com/acme/platform/issues/${issueNumber}`;
+  const contextTitle = `acme/platform#${issueNumber}`;
+
+  await page.goto(`/decisions/${seededDecision.id}`);
+  await expect(page.getByText("GitHub App is not configured.")).toBeVisible();
+
+  await page.getByPlaceholder("https://github.com/org/repo/issues/42").fill(issueUrl);
+  await page.getByRole("button", { name: "Link context" }).click();
+
+  await expect(page.getByRole("link", { name: contextTitle })).toBeVisible();
+  await expect(page.getByText("Sync failed", { exact: true })).toBeVisible();
+
+  await page.reload();
+  await expect(page.getByRole("link", { name: contextTitle })).toBeVisible();
+
+  await page.getByPlaceholder("https://github.com/org/repo/issues/42").fill(issueUrl);
+  await page.getByRole("button", { name: "Link context" }).click();
+  await expect(page.getByText("External context is already linked to this decision")).toBeVisible();
+
+  await page.getByRole("button", { name: `Remove context link ${contextTitle}` }).click();
+  await expect(page.getByRole("link", { name: contextTitle })).toHaveCount(0);
+
+  await page.reload();
+  await expect(page.getByRole("link", { name: contextTitle })).toHaveCount(0);
+});

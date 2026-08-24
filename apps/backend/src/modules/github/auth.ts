@@ -6,9 +6,9 @@ type InstallationTokenResponse = {
   expires_at: string;
 };
 
-let cachedInstallationToken: { token: string; expiresAt: number } | null = null;
+const cachedInstallationTokens = new Map<string, { token: string; expiresAt: number }>();
 
-function hasGitHubAppCredentials() {
+export function hasGitHubAppCredentials() {
   return Boolean(
     env.GITHUB_APP_ID && env.GITHUB_APP_INSTALLATION_ID && env.GITHUB_APP_PRIVATE_KEY
   );
@@ -18,7 +18,7 @@ function encodeJson(value: object) {
   return Buffer.from(JSON.stringify(value)).toString("base64url");
 }
 
-function createAppJwt() {
+export function createGitHubAppJwt() {
   const now = Math.floor(Date.now() / 1000);
   const header = encodeJson({ alg: "RS256", typ: "JWT" });
   const payload = encodeJson({
@@ -36,14 +36,15 @@ function createAppJwt() {
   return `${unsignedToken}.${signature}`;
 }
 
-async function createInstallationToken() {
+async function createInstallationToken(installationId: string) {
   const response = await fetch(
-    `https://api.github.com/app/installations/${env.GITHUB_APP_INSTALLATION_ID}/access_tokens`,
+    `https://api.github.com/app/installations/${installationId}/access_tokens`,
     {
       method: "POST",
       headers: {
         accept: "application/vnd.github+json",
-        authorization: `Bearer ${createAppJwt()}`,
+        authorization: `Bearer ${createGitHubAppJwt()}`,
+        "x-github-api-version": "2022-11-28",
         "user-agent": "DecisionCapture"
       }
     }
@@ -54,10 +55,10 @@ async function createInstallationToken() {
   }
 
   const payload = (await response.json()) as InstallationTokenResponse;
-  cachedInstallationToken = {
+  cachedInstallationTokens.set(installationId, {
     token: payload.token,
     expiresAt: new Date(payload.expires_at).getTime()
-  };
+  });
 
   return payload.token;
 }
@@ -66,14 +67,25 @@ export function hasGitHubApiCredentials() {
   return hasGitHubAppCredentials() || Boolean(env.GITHUB_API_TOKEN);
 }
 
-export async function getGitHubApiToken() {
+export async function getGitHubApiToken(installationId = env.GITHUB_APP_INSTALLATION_ID) {
   if (!hasGitHubAppCredentials()) {
     return env.GITHUB_API_TOKEN;
   }
 
+  if (!installationId) {
+    throw new Error("GitHub App installation ID is not configured");
+  }
+
+  const cachedInstallationToken = cachedInstallationTokens.get(installationId);
   if (cachedInstallationToken && cachedInstallationToken.expiresAt - Date.now() > 5 * 60_000) {
     return cachedInstallationToken.token;
   }
 
-  return createInstallationToken();
+  return createInstallationToken(installationId);
+}
+
+export function invalidateGitHubApiToken(installationId = env.GITHUB_APP_INSTALLATION_ID) {
+  if (installationId) {
+    cachedInstallationTokens.delete(installationId);
+  }
 }

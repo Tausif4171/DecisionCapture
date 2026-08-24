@@ -1,4 +1,5 @@
 import type {
+  ContextSyncStatus,
   ContextUrlResolution,
   DecisionContextLink as DecisionContextLinkResponse,
   DecisionContextRelationshipType,
@@ -6,11 +7,13 @@ import type {
   ExternalContextType
 } from "@decisioncapture/shared";
 import { Prisma } from "@prisma/client";
+import { logger } from "../../config/logger.js";
 import { HttpError } from "../../middleware/error.js";
 import { prisma } from "../database/prisma.js";
 import { privilegedRoles, type ReviewActor } from "../auth/types.js";
 import { prContextSchema } from "../decisions/validation.js";
 import { resolveExternalContextUrl } from "./providers/index.js";
+import { enqueueContextSync } from "./queue.js";
 
 type DecisionForContextAccess = {
   id: string;
@@ -35,6 +38,12 @@ type ExternalContextRecord = {
   lastSyncedAt: Date | null;
   createdAt: Date;
   updatedAt: Date;
+  syncState?: {
+    status: ContextSyncStatus;
+    lastAttemptAt: Date | null;
+    lastSuccessAt: Date | null;
+    error: string | null;
+  } | null;
 };
 
 type DecisionContextLinkRecord = {
@@ -87,6 +96,14 @@ function toExternalContext(context: ExternalContextRecord): ExternalContextRespo
     status: context.status,
     metadata: metadataToObject(context.metadata),
     lastSyncedAt: context.lastSyncedAt?.toISOString() ?? null,
+    sync: context.syncState
+      ? {
+          status: context.syncState.status,
+          lastAttemptAt: context.syncState.lastAttemptAt?.toISOString() ?? null,
+          lastSuccessAt: context.syncState.lastSuccessAt?.toISOString() ?? null,
+          error: context.syncState.error
+        }
+      : null,
     createdAt: context.createdAt.toISOString(),
     updatedAt: context.updatedAt.toISOString()
   };
@@ -160,7 +177,11 @@ export class ContextService {
 
     const links = await prisma.decisionContextLink.findMany({
       where: { decisionId },
-      include: { externalContext: true },
+      include: {
+        externalContext: {
+          include: { syncState: true }
+        }
+      },
       orderBy: { createdAt: "asc" }
     });
 
@@ -169,7 +190,8 @@ export class ContextService {
 
   async getContext(id: string): Promise<ExternalContextResponse> {
     const context = await prisma.externalContext.findUnique({
-      where: { id }
+      where: { id },
+      include: { syncState: true }
     });
 
     if (!context) {
@@ -223,9 +245,24 @@ export class ContextService {
             createdByUserId: actor.user?.id,
             createdByLogin: actorLogin(actor)
           },
-          include: { externalContext: true }
+          include: {
+            externalContext: {
+              include: { syncState: true }
+            }
+          }
         });
       });
+
+      if (link.externalContext.provider === "GITHUB" && link.externalContext.type === "ISSUE") {
+        try {
+          await enqueueContextSync(link.externalContext.id);
+        } catch (error) {
+          logger.warn(
+            { error, contextId: link.externalContext.id, decisionId },
+            "GitHub context was linked but initial synchronization could not be scheduled"
+          );
+        }
+      }
 
       return toDecisionContextLink(link);
     } catch (error) {
@@ -260,6 +297,34 @@ export class ContextService {
 
       throw error;
     }
+  }
+
+  async refreshDecisionContext(
+    decisionId: string,
+    externalContextId: string,
+    actor: ReviewActor = { authRequired: false }
+  ) {
+    await this.requireDecisionContextMutationAccess(decisionId, actor);
+    const link = await prisma.decisionContextLink.findUnique({
+      where: {
+        decisionId_externalContextId: {
+          decisionId,
+          externalContextId
+        }
+      },
+      include: { externalContext: true }
+    });
+
+    if (!link) {
+      throw new HttpError(404, "Decision context link not found");
+    }
+
+    if (link.externalContext.provider !== "GITHUB" || link.externalContext.type !== "ISSUE") {
+      throw new HttpError(400, "Only GitHub issue contexts can be refreshed in Phase 2");
+    }
+
+    await enqueueContextSync(externalContextId);
+    return { status: "queued" as const };
   }
 
   private async requireExistingDecision(decisionId: string) {

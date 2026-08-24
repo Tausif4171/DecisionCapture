@@ -7,7 +7,8 @@ import type {
   DecisionContextLink,
   DecisionContextRelationshipType,
   ExternalContextStatus,
-  ExternalContextType
+  ExternalContextType,
+  GitHubIssueContextMetadata
 } from "@decisioncapture/shared";
 import {
   Check,
@@ -20,6 +21,7 @@ import {
   Loader2,
   PencilLine,
   RotateCcw,
+  RefreshCw,
   Save,
   ShieldCheck,
   Sparkles,
@@ -34,6 +36,7 @@ import {
   getDecision,
   listDecisionContexts,
   listDecisionAudit,
+  refreshDecisionContext,
   rejectDecision,
   reopenDecision,
   updateDecision
@@ -52,6 +55,7 @@ import { useProtectedPageAccess } from "../../components/protected-page-access";
 import { ErrorState, LoadingState } from "../../components/state-views";
 import { ReviewReasonCallout } from "../../components/review-reason";
 import { ReviewReasonDialog } from "../../components/review-reason-dialog";
+import { GitHubIssuePicker } from "../../components/github-issue-picker";
 import { SelectMenu } from "../../components/select-menu";
 import { StatusBadge } from "../../components/status-badge";
 
@@ -131,6 +135,42 @@ function contextTitle(link: DecisionContextLink) {
   return link.context.title ?? link.context.normalizedUrl;
 }
 
+function githubIssueMetadata(link: DecisionContextLink) {
+  if (link.context.provider !== "GITHUB" || !link.context.metadata) {
+    return null;
+  }
+
+  const metadata = link.context.metadata;
+  if (
+    typeof metadata.repository !== "string" ||
+    typeof metadata.issueNumber !== "number" ||
+    typeof metadata.commentCount !== "number" ||
+    !Array.isArray(metadata.labels) ||
+    !Array.isArray(metadata.recentComments) ||
+    (metadata.state !== "open" && metadata.state !== "closed")
+  ) {
+    return null;
+  }
+
+  return metadata as unknown as GitHubIssueContextMetadata;
+}
+
+function formatSyncStatus(link: DecisionContextLink) {
+  if (link.context.status === "UNAVAILABLE") {
+    return "Unavailable";
+  }
+
+  const labels = {
+    PENDING: "Pending",
+    SYNCING: "Syncing",
+    SYNCED: "Synced",
+    FAILED: "Sync failed",
+    UNAVAILABLE: "Unavailable"
+  } as const;
+
+  return link.context.sync ? labels[link.context.sync.status] : formatContextStatus(link.context.status);
+}
+
 export default function DecisionDetailPage() {
   const params = useParams<{ id: string }>();
   const queryClient = useQueryClient();
@@ -144,7 +184,7 @@ export default function DecisionDetailPage() {
   const [showAllFiles, setShowAllFiles] = useState(false);
   const [showAllAudit, setShowAllAudit] = useState(false);
   const [contextUrl, setContextUrl] = useState("");
-  const [contextType, setContextType] = useState<ExternalContextType>("ARCHITECTURE_DOC");
+  const [contextType, setContextType] = useState<ExternalContextType>("ISSUE");
   const [contextRelationship, setContextRelationship] =
     useState<DecisionContextRelationshipType>("RELATED");
 
@@ -246,12 +286,22 @@ export default function DecisionDetailPage() {
     }
   });
 
+  const refreshContextMutation = useMutation({
+    mutationFn: (contextId: string) => refreshDecisionContext(params.id, contextId),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ["decision-contexts", params.id] });
+    }
+  });
+
   const isBusy =
     updateMutation.isPending ||
     approveMutation.isPending ||
     rejectMutation.isPending ||
     reopenMutation.isPending;
-  const isContextBusy = createContextMutation.isPending || deleteContextMutation.isPending;
+  const isContextBusy =
+    createContextMutation.isPending ||
+    deleteContextMutation.isPending ||
+    refreshContextMutation.isPending;
   const actionError = updateMutation.error ?? approveMutation.error;
 
   function startEditing() {
@@ -315,6 +365,11 @@ export default function DecisionDetailPage() {
   const contextLinks = contextsQuery.data ?? [];
   const canManageContexts = Boolean(
     decision.reviewPermissions?.canReview || decision.reviewPermissions?.canReopen
+  );
+  const canManageGitHubIntegration = Boolean(
+    authQuery.data?.authMode === "disabled" ||
+      authQuery.data?.user?.role === "ADMIN" ||
+      authQuery.data?.user?.role === "MAINTAINER"
   );
 
   return (
@@ -518,48 +573,127 @@ export default function DecisionDetailPage() {
               <p className="text-xs text-neutral-500">Loading context...</p>
             ) : contextLinks.length ? (
               <ul className="space-y-2">
-                {contextLinks.map((link) => (
-                  <li key={link.id} className="rounded-md border border-neutral-100 px-2 py-2">
-                    <div className="flex items-start justify-between gap-2">
-                      <div className="min-w-0">
-                        <a
-                          href={link.context.url}
-                          target="_blank"
-                          rel="noreferrer"
-                          className="block truncate text-sm font-medium text-neutral-900 hover:text-emerald-700"
-                        >
-                          {contextTitle(link)}
-                        </a>
-                        <p className="mt-1 text-xs text-neutral-500">
-                          {formatContextType(link.context.type)} - {formatRelationship(link.relationshipType)}
-                        </p>
-                      </div>
-                      <div className="flex shrink-0 items-center gap-1">
-                        <span
-                          className={`rounded px-1.5 py-1 text-[11px] font-semibold ${
-                            link.context.status === "UNAVAILABLE"
-                              ? "bg-red-50 text-red-700"
-                              : "bg-emerald-50 text-emerald-700"
-                          }`}
-                        >
-                          {formatContextStatus(link.context.status)}
-                        </span>
-                        {canManageContexts ? (
-                          <button
-                            type="button"
-                            onClick={() => deleteContextMutation.mutate(link.externalContextId)}
-                            disabled={isContextBusy}
-                            className="inline-flex size-8 items-center justify-center rounded-md text-neutral-400 hover:bg-red-50 hover:text-red-700 disabled:text-neutral-300"
-                            title="Remove context link"
-                            aria-label={`Remove context link ${contextTitle(link)}`}
+                {contextLinks.map((link) => {
+                  const githubMetadata = githubIssueMetadata(link);
+                  const syncStatus = link.context.sync?.status;
+                  const syncProblem =
+                    link.context.status === "UNAVAILABLE" ||
+                    syncStatus === "FAILED" ||
+                    syncStatus === "UNAVAILABLE";
+                  const syncPending = syncStatus === "PENDING" || syncStatus === "SYNCING";
+
+                  return (
+                    <li key={link.id} className="rounded-md border border-neutral-100 px-2 py-2">
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="min-w-0">
+                          <a
+                            href={link.context.url}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="block truncate text-sm font-medium text-neutral-900 hover:text-emerald-700"
                           >
-                            <Trash2 className="size-4" aria-hidden="true" />
-                          </button>
-                        ) : null}
+                            {contextTitle(link)}
+                          </a>
+                          <p className="mt-1 text-xs text-neutral-500">
+                            {githubMetadata
+                              ? `${githubMetadata.repository}#${githubMetadata.issueNumber} - ${githubMetadata.state}`
+                              : `${formatContextType(link.context.type)} - ${formatRelationship(link.relationshipType)}`}
+                          </p>
+                        </div>
+                        <div className="flex shrink-0 items-center gap-1">
+                          <span
+                            className={`rounded px-1.5 py-1 text-[11px] font-semibold ${
+                              syncProblem
+                                ? "bg-red-50 text-red-700"
+                                : syncPending
+                                  ? "bg-amber-50 text-amber-700"
+                                  : "bg-emerald-50 text-emerald-700"
+                            }`}
+                          >
+                            {formatSyncStatus(link)}
+                          </span>
+                          {canManageContexts && link.context.provider === "GITHUB" ? (
+                            <button
+                              type="button"
+                              onClick={() => refreshContextMutation.mutate(link.externalContextId)}
+                              disabled={isContextBusy}
+                              className="inline-flex size-8 items-center justify-center rounded-md text-neutral-400 hover:bg-neutral-100 hover:text-neutral-700 disabled:text-neutral-300"
+                              title="Refresh GitHub issue"
+                              aria-label={`Refresh ${contextTitle(link)}`}
+                            >
+                              <RefreshCw
+                                className={`size-4 ${
+                                  refreshContextMutation.isPending &&
+                                  refreshContextMutation.variables === link.externalContextId
+                                    ? "animate-spin"
+                                    : ""
+                                }`}
+                                aria-hidden="true"
+                              />
+                            </button>
+                          ) : null}
+                          {canManageContexts ? (
+                            <button
+                              type="button"
+                              onClick={() => deleteContextMutation.mutate(link.externalContextId)}
+                              disabled={isContextBusy}
+                              className="inline-flex size-8 items-center justify-center rounded-md text-neutral-400 hover:bg-red-50 hover:text-red-700 disabled:text-neutral-300"
+                              title="Remove context link"
+                              aria-label={`Remove context link ${contextTitle(link)}`}
+                            >
+                              <Trash2 className="size-4" aria-hidden="true" />
+                            </button>
+                          ) : null}
+                        </div>
                       </div>
-                    </div>
-                  </li>
-                ))}
+                      {link.context.description ? (
+                        <p className="mt-2 line-clamp-3 whitespace-pre-wrap text-xs leading-5 text-neutral-600">
+                          {link.context.description}
+                        </p>
+                      ) : null}
+                      {githubMetadata ? (
+                        <>
+                          <div className="mt-2 flex flex-wrap items-center gap-1.5 text-[11px] text-neutral-500">
+                            {githubMetadata.authorLogin ? <span>@{githubMetadata.authorLogin}</span> : null}
+                            <span>{githubMetadata.commentCount} comments</span>
+                            {githubMetadata.labels.slice(0, 4).map((label) => (
+                              <span key={label.name} className="rounded bg-neutral-100 px-1.5 py-0.5 text-neutral-700">
+                                {label.name}
+                              </span>
+                            ))}
+                          </div>
+                          {githubMetadata.recentComments.length ? (
+                            <details className="mt-2 text-xs text-neutral-600">
+                              <summary className="cursor-pointer font-medium text-neutral-700">
+                                Recent comments
+                              </summary>
+                              <ol className="mt-2 space-y-2 border-l border-neutral-200 pl-2">
+                                {githubMetadata.recentComments.slice(-3).map((comment) => (
+                                  <li key={comment.id}>
+                                    <a
+                                      href={comment.url}
+                                      target="_blank"
+                                      rel="noreferrer"
+                                      className="font-medium text-neutral-700 hover:text-emerald-700"
+                                    >
+                                      {comment.authorLogin ? `@${comment.authorLogin}` : "GitHub user"}
+                                    </a>
+                                    <p className="mt-0.5 line-clamp-3 whitespace-pre-wrap leading-5">
+                                      {comment.body}
+                                    </p>
+                                  </li>
+                                ))}
+                              </ol>
+                            </details>
+                          ) : null}
+                        </>
+                      ) : null}
+                      {link.context.sync?.error ? (
+                        <p className="mt-2 text-xs text-red-600">{link.context.sync.error}</p>
+                      ) : null}
+                    </li>
+                  );
+                })}
               </ul>
             ) : (
               <p className="text-xs text-neutral-500">No context linked.</p>
@@ -569,6 +703,17 @@ export default function DecisionDetailPage() {
             ) : null}
             {canManageContexts ? (
               <form className="mt-3 space-y-2" onSubmit={submitContextLink}>
+                {contextType === "ISSUE" ? (
+                  <GitHubIssuePicker
+                    defaultRepository={decision.repository}
+                    canManageIntegration={canManageGitHubIntegration}
+                    disabled={isContextBusy}
+                    onSelect={(url) => {
+                      createContextMutation.reset();
+                      setContextUrl(url);
+                    }}
+                  />
+                ) : null}
                 <label className="block">
                   <span className="sr-only">Context URL</span>
                   <input
@@ -615,6 +760,9 @@ export default function DecisionDetailPage() {
                 ) : null}
                 {deleteContextMutation.error instanceof Error ? (
                   <p className="text-xs text-red-600">{deleteContextMutation.error.message}</p>
+                ) : null}
+                {refreshContextMutation.error instanceof Error ? (
+                  <p className="text-xs text-red-600">{refreshContextMutation.error.message}</p>
                 ) : null}
               </form>
             ) : null}
