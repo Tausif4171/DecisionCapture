@@ -2,23 +2,17 @@ import type { Request, Response } from "express";
 import { env } from "../../config/env.js";
 import { HttpError } from "../../middleware/error.js";
 import { analyzeOrQueue } from "../queue/service.js";
+import { contextWebhookService } from "../contexts/webhook.service.js";
 import { enrichWebhookToPRContext, shouldProcessPullRequestWebhook } from "./service.js";
 import { verifyGitHubSignature } from "./signature.js";
 import { githubPullRequestWebhookSchema } from "./validation.js";
 
 export async function githubWebhook(request: Request, response: Response) {
   const eventName = request.header("x-github-event");
+  const pullRequestPayload =
+    eventName === "pull_request" ? githubPullRequestWebhookSchema.parse(request.body) : null;
 
-  if (eventName !== "pull_request") {
-    return response.status(202).json({
-      status: "ignored",
-      message: `Ignoring GitHub event ${eventName ?? "unknown"}`
-    });
-  }
-
-  const payload = githubPullRequestWebhookSchema.parse(request.body);
-
-  if (!shouldProcessPullRequestWebhook(payload)) {
+  if (pullRequestPayload && !shouldProcessPullRequestWebhook(pullRequestPayload)) {
     return response.status(202).json({
       status: "ignored",
       message: "Only merged pull_request.closed events are analyzed"
@@ -36,7 +30,28 @@ export async function githubWebhook(request: Request, response: Response) {
     throw new HttpError(401, "Invalid GitHub webhook signature");
   }
 
-  const context = await enrichWebhookToPRContext(payload);
+  if (["issues", "issue_comment", "installation", "installation_repositories"].includes(eventName ?? "")) {
+    const deliveryId = request.header("x-github-delivery");
+    if (!deliveryId) {
+      throw new HttpError(400, "GitHub webhook delivery id is required");
+    }
+
+    if (!request.body || typeof request.body !== "object" || Array.isArray(request.body)) {
+      throw new HttpError(400, "GitHub webhook payload must be an object");
+    }
+
+    const result = await contextWebhookService.receive(eventName!, deliveryId, request.body);
+    return response.status(202).json(result);
+  }
+
+  if (eventName !== "pull_request") {
+    return response.status(202).json({
+      status: "ignored",
+      message: `Ignoring GitHub event ${eventName ?? "unknown"}`
+    });
+  }
+
+  const context = await enrichWebhookToPRContext(pullRequestPayload!);
   const result = await analyzeOrQueue(context);
   return response.status(result.status === "queued" ? 202 : 200).json(result);
 }

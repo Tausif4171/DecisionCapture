@@ -5,7 +5,8 @@ import { requireDashboardUser } from "../auth/middleware.js";
 import {
   createDecisionContextLink,
   deleteDecisionContextLink,
-  listDecisionContexts
+  listDecisionContexts,
+  refreshDecisionContext
 } from "../contexts/controller.js";
 import {
   analyzeDecision,
@@ -27,6 +28,7 @@ const decisionRoutePaths = {
   stats: "/stats",
   contexts: "/:id/contexts",
   contextDetail: "/:id/contexts/:contextId",
+  contextRefresh: "/:id/contexts/:contextId/refresh",
   detail: "/:id",
   audit: "/:id/audit",
   approve: "/:id/approve",
@@ -40,6 +42,7 @@ decisionsRouter.get(decisionRoutePaths.list, asyncHandler(listDecisions));
 decisionsRouter.get(decisionRoutePaths.stats, asyncHandler(decisionStats));
 decisionsRouter.get(decisionRoutePaths.contexts, asyncHandler(listDecisionContexts));
 decisionsRouter.post(decisionRoutePaths.contexts, asyncHandler(createDecisionContextLink));
+decisionsRouter.post(decisionRoutePaths.contextRefresh, asyncHandler(refreshDecisionContext));
 decisionsRouter.delete(decisionRoutePaths.contextDetail, asyncHandler(deleteDecisionContextLink));
 decisionsRouter.get(decisionRoutePaths.detail, asyncHandler(getDecision));
 decisionsRouter.get(decisionRoutePaths.audit, asyncHandler(listDecisionAuditLogs));

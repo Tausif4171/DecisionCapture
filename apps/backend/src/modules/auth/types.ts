@@ -8,4 +8,5 @@ export type ReviewActor = {
 };
 
 export const privilegedRoles: UserRole[] = ["ADMIN", "MAINTAINER", "REVIEWER"];
+export const integrationManagerRoles: UserRole[] = ["ADMIN", "MAINTAINER"];
 export const reopenRoles: UserRole[] = ["ADMIN", "MAINTAINER"];

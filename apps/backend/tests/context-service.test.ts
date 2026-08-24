@@ -18,9 +18,14 @@ const mockPrisma = vi.hoisted(() => ({
   }
 }));
 
+const queueMock = vi.hoisted(() => ({
+  enqueueContextSync: vi.fn()
+}));
+
 vi.mock("../src/modules/database/prisma.js", () => ({
   prisma: mockPrisma
 }));
+vi.mock("../src/modules/contexts/queue.js", () => queueMock);
 
 import { ContextService } from "../src/modules/contexts/service.js";
 import { createDecisionContextLinkSchema } from "../src/modules/contexts/validation.js";
@@ -102,6 +107,7 @@ describe("ContextService", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockPrisma.$transaction.mockImplementation(async (callback) => callback(mockPrisma));
+    queueMock.enqueueContextSync.mockResolvedValue(undefined);
   });
 
   it("normalizes external URLs into stable identities", () => {
@@ -182,6 +188,7 @@ describe("ContextService", () => {
         type: "ISSUE"
       }
     });
+    expect(queueMock.enqueueContextSync).toHaveBeenCalledWith("context-1");
   });
 
   it("retrieves context links for a decision", async () => {
@@ -195,7 +202,11 @@ describe("ContextService", () => {
 
     expect(mockPrisma.decisionContextLink.findMany).toHaveBeenCalledWith({
       where: { decisionId: "decision-42" },
-      include: { externalContext: true },
+      include: {
+        externalContext: {
+          include: { syncState: true }
+        }
+      },
       orderBy: { createdAt: "asc" }
     });
     expect(result).toHaveLength(1);
@@ -308,6 +319,32 @@ describe("ContextService", () => {
           lastKnownStatus: "deleted"
         }
       }
+    });
+  });
+
+  it("returns synchronization state with linked context", async () => {
+    const service = new ContextService();
+    const link = buildContextLink({
+      externalContext: buildExternalContext({
+        syncState: {
+          status: "SYNCED",
+          lastAttemptAt: new Date("2026-06-16T06:36:00.000Z"),
+          lastSuccessAt: new Date("2026-06-16T06:36:01.000Z"),
+          error: null
+        }
+      })
+    });
+
+    mockPrisma.decisionMemory.findUnique.mockResolvedValue({ id: "decision-42" });
+    mockPrisma.decisionContextLink.findMany.mockResolvedValue([link]);
+
+    const result = await service.listDecisionContexts("decision-42");
+
+    expect(result[0]?.context.sync).toEqual({
+      status: "SYNCED",
+      lastAttemptAt: "2026-06-16T06:36:00.000Z",
+      lastSuccessAt: "2026-06-16T06:36:01.000Z",
+      error: null
     });
   });
 });

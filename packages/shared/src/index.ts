@@ -5,6 +5,7 @@ export type DecisionExtractionMethod = "OLLAMA" | "STRUCTURED_FALLBACK" | "UNKNO
 export type ContextProvider = "GITHUB" | "LINEAR" | "JIRA" | "GENERIC";
 export type ExternalContextType = "ISSUE" | "ADR" | "ARCHITECTURE_DOC" | "MEETING";
 export type ExternalContextStatus = "ACTIVE" | "UNAVAILABLE";
+export type ContextSyncStatus = "PENDING" | "SYNCING" | "SYNCED" | "FAILED" | "UNAVAILABLE";
 export type DecisionContextRelationshipType =
   | "RELATED"
   | "ORIGINATED_FROM"
@@ -121,6 +122,12 @@ export interface ExternalContext {
   status: ExternalContextStatus;
   metadata?: Record<string, unknown> | null;
   lastSyncedAt?: string | null;
+  sync?: {
+    status: ContextSyncStatus;
+    lastAttemptAt?: string | null;
+    lastSuccessAt?: string | null;
+    error?: string | null;
+  } | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -145,6 +152,61 @@ export interface ContextUrlResolution {
   normalizedUrl: string;
   title?: string | null;
   metadata?: Record<string, unknown> | null;
+}
+
+export interface GitHubConnectionStatus {
+  configured: boolean;
+  connected: boolean;
+  installationId?: string | null;
+  accountLogin?: string | null;
+  repositorySelection?: string | null;
+  status?: "ACTIVE" | "DISCONNECTED" | "ERROR" | null;
+}
+
+export interface GitHubRepositorySummary {
+  id: number;
+  fullName: string;
+  private: boolean;
+  url: string;
+}
+
+export interface GitHubIssueSummary {
+  id: number;
+  number: number;
+  repository: string;
+  title: string;
+  state: "open" | "closed";
+  url: string;
+  authorLogin?: string | null;
+  labels: string[];
+  updatedAt: string;
+}
+
+export interface GitHubIssueCommentSnapshot {
+  id: number;
+  authorLogin?: string | null;
+  body: string;
+  url: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface GitHubIssueContextMetadata {
+  owner: string;
+  repo: string;
+  repository: string;
+  issueNumber: number;
+  githubIssueId: number;
+  nodeId: string;
+  state: "open" | "closed";
+  stateReason?: string | null;
+  authorLogin?: string | null;
+  authorAvatarUrl?: string | null;
+  labels: Array<{ name: string; color?: string | null }>;
+  commentCount: number;
+  recentComments: GitHubIssueCommentSnapshot[];
+  githubCreatedAt: string;
+  githubUpdatedAt: string;
 }
 
 export interface PRRecord {

@@ -2,6 +2,7 @@ import { env } from "./config/env.js";
 import { logger } from "./config/logger.js";
 import { createApp } from "./app.js";
 import { startDecisionWorker } from "./modules/queue/queue.js";
+import { startContextWorker } from "./modules/contexts/queue.js";
 
 const app = createApp();
 
@@ -13,6 +14,7 @@ if (env.QUEUE_MODE === "bullmq" && env.QUEUE_WORKER_ENABLED) {
     "Starting DecisionCapture BullMQ worker"
   );
   startDecisionWorker();
+  startContextWorker();
 }
 
 app.listen(env.PORT, () => {
