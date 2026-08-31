@@ -13,14 +13,26 @@ type SelectMenuProps = {
   value: string;
   options: SelectMenuOption[];
   onChange: (value: string) => void;
+  placeholder?: string;
+  showLabel?: boolean;
+  disabled?: boolean;
 };
 
-export function SelectMenu({ label, value, options, onChange }: SelectMenuProps) {
+export function SelectMenu({
+  label,
+  value,
+  options,
+  onChange,
+  placeholder,
+  showLabel = false,
+  disabled = false
+}: SelectMenuProps) {
   const labelId = useId();
   const menuId = useId();
   const containerRef = useRef<HTMLDivElement>(null);
   const [isOpen, setIsOpen] = useState(false);
-  const selectedOption = options.find((option) => option.value === value) ?? options[0]!;
+  const selectedOption =
+    options.find((option) => option.value === value) ?? (placeholder ? undefined : options[0]);
 
   useEffect(() => {
     if (!isOpen) {
@@ -48,6 +60,15 @@ export function SelectMenu({ label, value, options, onChange }: SelectMenuProps)
   }, [isOpen]);
 
   function selectRelativeOption(direction: 1 | -1) {
+    if (!options.length) {
+      return;
+    }
+
+    if (!selectedOption) {
+      onChange(options[direction === 1 ? 0 : options.length - 1]!.value);
+      return;
+    }
+
     const currentIndex = Math.max(
       0,
       options.findIndex((option) => option.value === selectedOption.value)
@@ -58,16 +79,20 @@ export function SelectMenu({ label, value, options, onChange }: SelectMenuProps)
 
   return (
     <div ref={containerRef} className="relative">
-      <span id={labelId} className="sr-only">
+      <span
+        id={labelId}
+        className={showLabel ? "mb-1 block text-xs font-medium text-neutral-600" : "sr-only"}
+      >
         {label}
       </span>
       <button
         type="button"
+        disabled={disabled || options.length === 0}
         aria-haspopup="listbox"
         aria-expanded={isOpen}
         aria-labelledby={labelId}
         aria-controls={isOpen ? menuId : undefined}
-        className="inline-flex min-h-10 w-full items-center justify-between gap-3 rounded-md border border-neutral-200 bg-white px-3 text-sm font-medium text-neutral-700 shadow-sm outline-none transition hover:border-neutral-300 hover:bg-neutral-50 focus:border-emerald-600 focus:ring-2 focus:ring-emerald-100"
+        className="inline-flex min-h-10 w-full items-center justify-between gap-3 rounded-md border border-neutral-200 bg-white px-3 text-sm font-medium text-neutral-700 shadow-sm outline-none transition hover:border-neutral-300 hover:bg-neutral-50 focus:border-emerald-600 focus:ring-2 focus:ring-emerald-100 disabled:cursor-not-allowed disabled:bg-neutral-50 disabled:text-neutral-400"
         onClick={() => setIsOpen((current) => !current)}
         onKeyDown={(event) => {
           if (event.key === "ArrowDown") {
@@ -82,7 +107,9 @@ export function SelectMenu({ label, value, options, onChange }: SelectMenuProps)
           }
         }}
       >
-        <span className="truncate">{selectedOption.label}</span>
+        <span className={`truncate ${selectedOption ? "" : "text-neutral-400"}`}>
+          {selectedOption?.label ?? placeholder ?? "Select an option"}
+        </span>
         <ChevronDown
           className={`size-4 shrink-0 text-neutral-400 transition ${isOpen ? "rotate-180" : ""}`}
           aria-hidden="true"
@@ -96,7 +123,7 @@ export function SelectMenu({ label, value, options, onChange }: SelectMenuProps)
           className="absolute left-0 top-[calc(100%+0.375rem)] z-30 w-full min-w-44 overflow-hidden rounded-md border border-neutral-200 bg-white p-1 shadow-lg"
         >
           {options.map((option) => {
-            const selected = option.value === selectedOption.value;
+            const selected = option.value === selectedOption?.value;
 
             return (
               <button

@@ -61,6 +61,8 @@ import { StatusBadge } from "../../components/status-badge";
 
 const FILE_PREVIEW_LIMIT = 8;
 const AUDIT_PREVIEW_LIMIT = 6;
+const ACTIVE_CONTEXT_POLL_INTERVAL_MS = 1_000;
+const SETTLED_CONTEXT_POLL_INTERVAL_MS = 15_000;
 const CONTEXT_TYPE_OPTIONS = [
   { value: "ARCHITECTURE_DOC", label: "Architecture doc" },
   { value: "ADR", label: "ADR" },
@@ -129,6 +131,14 @@ function formatRelationship(type: DecisionContextRelationshipType) {
 
 function formatContextStatus(status: ExternalContextStatus) {
   return status === "UNAVAILABLE" ? "Unavailable" : "Active";
+}
+
+function formatIssueState(state: GitHubIssueContextMetadata["state"]) {
+  return state === "open" ? "Open" : "Closed";
+}
+
+function formatCommentCount(count: number) {
+  return `${count} ${count === 1 ? "comment" : "comments"}`;
 }
 
 function contextTitle(link: DecisionContextLink) {
@@ -202,7 +212,23 @@ export default function DecisionDetailPage() {
   const contextsQuery = useQuery({
     queryKey: ["decision-contexts", params.id],
     queryFn: () => listDecisionContexts(params.id),
-    enabled: access.canLoadProtectedData && Boolean(decisionQuery.data)
+    enabled: access.canLoadProtectedData && Boolean(decisionQuery.data),
+    refetchInterval: (query) => {
+      const links = query.state.data;
+      if (!links?.length) {
+        return false;
+      }
+
+      const synchronizationActive = links.some((link) => {
+        const status = link.context.sync?.status;
+        return status === "PENDING" || status === "SYNCING";
+      });
+
+      return synchronizationActive
+        ? ACTIVE_CONTEXT_POLL_INTERVAL_MS
+        : SETTLED_CONTEXT_POLL_INTERVAL_MS;
+    },
+    refetchIntervalInBackground: false
   });
   const authQuery = access.authQuery;
 
@@ -498,8 +524,8 @@ export default function DecisionDetailPage() {
         ) : null}
       </section>
 
-      <section className="grid gap-5 lg:grid-cols-[1.5fr_1fr]">
-        <div className="space-y-4 rounded-md border border-neutral-200 bg-white p-5 shadow-sm">
+      <section className="grid min-w-0 gap-5 lg:grid-cols-[1.5fr_1fr]">
+        <div className="min-w-0 space-y-4 rounded-md border border-neutral-200 bg-white p-5 shadow-sm">
           {isEditing ? (
             <>
               <label className="block">
@@ -536,7 +562,7 @@ export default function DecisionDetailPage() {
           )}
         </div>
 
-        <aside className="space-y-4 rounded-md border border-neutral-200 bg-white p-5 shadow-sm">
+        <aside className="min-w-0 space-y-4 rounded-md border border-neutral-200 bg-white p-5 shadow-sm">
           <div className="flex items-center gap-2 text-sm font-semibold text-neutral-950">
             <ShieldCheck className="size-4 text-emerald-600" aria-hidden="true" />
             Source and provenance
@@ -584,25 +610,26 @@ export default function DecisionDetailPage() {
 
                   return (
                     <li key={link.id} className="rounded-md border border-neutral-100 px-2 py-2">
-                      <div className="flex items-start justify-between gap-2">
+                      <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
                         <div className="min-w-0">
                           <a
                             href={link.context.url}
                             target="_blank"
                             rel="noreferrer"
-                            className="block truncate text-sm font-medium text-neutral-900 hover:text-emerald-700"
+                            className="line-clamp-2 break-words text-sm font-medium text-neutral-900 hover:text-emerald-700"
                           >
                             {contextTitle(link)}
                           </a>
                           <p className="mt-1 text-xs text-neutral-500">
                             {githubMetadata
-                              ? `${githubMetadata.repository}#${githubMetadata.issueNumber} - ${githubMetadata.state}`
+                              ? `${githubMetadata.repository}#${githubMetadata.issueNumber} - ${formatIssueState(githubMetadata.state)}`
                               : `${formatContextType(link.context.type)} - ${formatRelationship(link.relationshipType)}`}
                           </p>
                         </div>
-                        <div className="flex shrink-0 items-center gap-1">
+                        <div className="flex shrink-0 items-center gap-1 self-end sm:self-auto">
                           <span
-                            className={`rounded px-1.5 py-1 text-[11px] font-semibold ${
+                            aria-live="polite"
+                            className={`inline-flex items-center gap-1 rounded px-1.5 py-1 text-[11px] font-semibold ${
                               syncProblem
                                 ? "bg-red-50 text-red-700"
                                 : syncPending
@@ -610,13 +637,16 @@ export default function DecisionDetailPage() {
                                   : "bg-emerald-50 text-emerald-700"
                             }`}
                           >
+                            {syncPending ? (
+                              <Loader2 className="size-3 animate-spin" aria-hidden="true" />
+                            ) : null}
                             {formatSyncStatus(link)}
                           </span>
                           {canManageContexts && link.context.provider === "GITHUB" ? (
                             <button
                               type="button"
                               onClick={() => refreshContextMutation.mutate(link.externalContextId)}
-                              disabled={isContextBusy}
+                              disabled={isContextBusy || syncPending}
                               className="inline-flex size-8 items-center justify-center rounded-md text-neutral-400 hover:bg-neutral-100 hover:text-neutral-700 disabled:text-neutral-300"
                               title="Refresh GitHub issue"
                               aria-label={`Refresh ${contextTitle(link)}`}
@@ -655,7 +685,7 @@ export default function DecisionDetailPage() {
                         <>
                           <div className="mt-2 flex flex-wrap items-center gap-1.5 text-[11px] text-neutral-500">
                             {githubMetadata.authorLogin ? <span>@{githubMetadata.authorLogin}</span> : null}
-                            <span>{githubMetadata.commentCount} comments</span>
+                            <span>{formatCommentCount(githubMetadata.commentCount)}</span>
                             {githubMetadata.labels.slice(0, 4).map((label) => (
                               <span key={label.name} className="rounded bg-neutral-100 px-1.5 py-0.5 text-neutral-700">
                                 {label.name}
@@ -702,12 +732,14 @@ export default function DecisionDetailPage() {
               <p className="mt-2 text-xs text-red-600">{contextsQuery.error.message}</p>
             ) : null}
             {canManageContexts ? (
-              <form className="mt-3 space-y-2" onSubmit={submitContextLink}>
+              <form className="mt-4 space-y-3 border-t border-neutral-100 pt-4" onSubmit={submitContextLink}>
+                <p className="text-xs font-semibold uppercase tracking-normal text-neutral-500">Add context</p>
                 {contextType === "ISSUE" ? (
                   <GitHubIssuePicker
                     defaultRepository={decision.repository}
                     canManageIntegration={canManageGitHubIntegration}
                     disabled={isContextBusy}
+                    value={contextUrl}
                     onSelect={(url) => {
                       createContextMutation.reset();
                       setContextUrl(url);
@@ -715,27 +747,40 @@ export default function DecisionDetailPage() {
                   />
                 ) : null}
                 <label className="block">
-                  <span className="sr-only">Context URL</span>
+                  <span className="mb-1 block text-xs font-medium text-neutral-600">
+                    {contextType === "ISSUE" ? "Issue URL" : "Context URL"}
+                  </span>
                   <input
                     value={contextUrl}
+                    disabled={isContextBusy}
                     onChange={(event) => {
                       createContextMutation.reset();
                       setContextUrl(event.target.value);
                     }}
-                    placeholder="https://github.com/org/repo/issues/42"
-                    className="min-h-10 w-full rounded-md border border-neutral-200 px-3 text-sm outline-none transition focus:border-neutral-400"
+                    placeholder={
+                      contextType === "ISSUE" ? "Paste a GitHub issue URL" : "Paste a context URL"
+                    }
+                    className="min-h-10 w-full rounded-md border border-neutral-200 px-3 text-sm outline-none transition focus:border-neutral-400 disabled:cursor-not-allowed disabled:bg-neutral-50 disabled:text-neutral-400"
                   />
                 </label>
                 <div className="grid gap-2 sm:grid-cols-2">
                   <SelectMenu
                     label="Context type"
                     value={contextType}
+                    showLabel
+                    disabled={isContextBusy}
                     options={CONTEXT_TYPE_OPTIONS}
-                    onChange={(value) => setContextType(value as ExternalContextType)}
+                    onChange={(value) => {
+                      createContextMutation.reset();
+                      setContextType(value as ExternalContextType);
+                      setContextUrl("");
+                    }}
                   />
                   <SelectMenu
                     label="Relationship type"
                     value={contextRelationship}
+                    showLabel
+                    disabled={isContextBusy}
                     options={RELATIONSHIP_OPTIONS}
                     onChange={(value) =>
                       setContextRelationship(value as DecisionContextRelationshipType)
@@ -744,7 +789,7 @@ export default function DecisionDetailPage() {
                 </div>
                 <button
                   type="submit"
-                  disabled={!contextUrl.trim() || createContextMutation.isPending}
+                  disabled={!contextUrl.trim() || isContextBusy}
                   className="inline-flex min-h-10 w-full items-center justify-center gap-2 rounded-md border border-neutral-200 px-3 text-sm font-medium text-neutral-700 transition hover:bg-neutral-50 disabled:text-neutral-400"
                   title="Link context"
                 >

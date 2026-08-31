@@ -15,6 +15,7 @@ type GitHubIssuePickerProps = {
   defaultRepository: string;
   canManageIntegration: boolean;
   disabled: boolean;
+  value: string;
   onSelect: (url: string) => void;
 };
 
@@ -22,13 +23,13 @@ export function GitHubIssuePicker({
   defaultRepository,
   canManageIntegration,
   disabled,
+  value,
   onSelect
 }: GitHubIssuePickerProps) {
   const queryClient = useQueryClient();
   const [selectedRepository, setSelectedRepository] = useState("");
   const [search, setSearch] = useState("");
   const [appliedSearch, setAppliedSearch] = useState("");
-  const [selectedIssueUrl, setSelectedIssueUrl] = useState("");
   const connectionQuery = useQuery({
     queryKey: ["github-context-connection"],
     queryFn: getGitHubConnection
@@ -59,6 +60,15 @@ export function GitHubIssuePicker({
     enabled: connected && canManageIntegration && Boolean(repository)
   });
   const issues = issuesQuery.data ?? [];
+  const selectedIssueUrl = issues.some((issue) => issue.url === value) ? value : "";
+
+  function applySearch() {
+    const nextSearch = search.trim();
+    if (nextSearch !== appliedSearch) {
+      onSelect("");
+    }
+    setAppliedSearch(nextSearch);
+  }
 
   if (connectionQuery.isLoading) {
     return <p className="text-xs text-neutral-500">Checking GitHub connection...</p>;
@@ -115,13 +125,17 @@ export function GitHubIssuePicker({
       <SelectMenu
         label="GitHub repository"
         value={repository}
+        showLabel
+        disabled={disabled}
         options={repositories.map((candidate) => ({
           value: candidate.fullName,
           label: candidate.fullName
         }))}
         onChange={(value) => {
           setSelectedRepository(value);
-          setSelectedIssueUrl("");
+          setSearch("");
+          setAppliedSearch("");
+          onSelect("");
         }}
       />
       <div className="flex gap-2">
@@ -130,20 +144,22 @@ export function GitHubIssuePicker({
           <input
             value={search}
             onChange={(event) => setSearch(event.target.value)}
+            disabled={disabled}
             onKeyDown={(event) => {
               if (event.key === "Enter") {
                 event.preventDefault();
-                setAppliedSearch(search.trim());
+                applySearch();
               }
             }}
             placeholder="Search title or issue number"
-            className="min-h-10 w-full rounded-md border border-neutral-200 px-3 text-sm outline-none focus:border-neutral-400"
+            className="min-h-10 w-full rounded-md border border-neutral-200 px-3 text-sm outline-none focus:border-neutral-400 disabled:cursor-not-allowed disabled:bg-neutral-50 disabled:text-neutral-400"
           />
         </label>
         <button
           type="button"
-          onClick={() => setAppliedSearch(search.trim())}
-          className="inline-flex size-10 shrink-0 items-center justify-center rounded-md border border-neutral-200 text-neutral-600 hover:bg-neutral-50"
+          onClick={applySearch}
+          disabled={disabled}
+          className="inline-flex size-10 shrink-0 items-center justify-center rounded-md border border-neutral-200 text-neutral-600 hover:bg-neutral-50 disabled:text-neutral-300"
           title="Search GitHub issues"
           aria-label="Search GitHub issues"
         >
@@ -152,7 +168,7 @@ export function GitHubIssuePicker({
         <button
           type="button"
           onClick={() => issuesQuery.refetch()}
-          disabled={issuesQuery.isFetching}
+          disabled={disabled || issuesQuery.isFetching}
           className="inline-flex size-10 shrink-0 items-center justify-center rounded-md border border-neutral-200 text-neutral-600 hover:bg-neutral-50 disabled:text-neutral-300"
           title="Refresh GitHub issues"
           aria-label="Refresh GitHub issues"
@@ -168,12 +184,14 @@ export function GitHubIssuePicker({
         <SelectMenu
           label="GitHub issue"
           value={selectedIssueUrl}
+          placeholder="Select a GitHub issue"
+          showLabel
+          disabled={disabled}
           options={issues.map((issue) => ({
             value: issue.url,
             label: `#${issue.number} ${issue.title}`
           }))}
           onChange={(value) => {
-            setSelectedIssueUrl(value);
             onSelect(value);
           }}
         />
