@@ -344,8 +344,13 @@ test("GitHub issue selection and synchronization update without a page reload", 
     });
   });
   await page.route(`${API_URL}/contexts/providers/github/repositories`, async (route) => {
+    const repositories = Array.from({ length: 14 }, (_, index) => {
+      const fullName = index === 0 ? repository : `Tausif4171/test-repository-${index}`;
+      return { id: index + 1, fullName, private: false, url: `https://github.com/${fullName}` };
+    });
+
     await route.fulfill({
-      json: [{ id: 1, fullName: repository, private: false, url: `https://github.com/${repository}` }]
+      json: repositories
     });
   });
   await page.route(`${API_URL}/contexts/providers/github/issues**`, async (route) => {
@@ -389,6 +394,15 @@ test("GitHub issue selection and synchronization update without a page reload", 
   const issueMenu = page.getByRole("button", { name: "GitHub issue", exact: true });
   const issueUrlInput = page.getByLabel("Issue URL");
   const linkButton = page.getByRole("button", { name: "Link context" });
+
+  const repositoryMenu = page.getByRole("button", { name: "GitHub repository", exact: true });
+  await repositoryMenu.click();
+  const repositoryListbox = page.getByRole("listbox").first();
+  await expect(repositoryListbox.getByRole("option")).toHaveCount(14);
+  await expect
+    .poll(() => repositoryListbox.evaluate((element) => element.scrollHeight > element.clientHeight))
+    .toBe(true);
+  await page.keyboard.press("Escape");
 
   await expect(issueMenu).toContainText("Select a GitHub issue");
   await expect(issueUrlInput).toHaveValue("");
