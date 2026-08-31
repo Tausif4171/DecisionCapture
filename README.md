@@ -351,6 +351,10 @@ Each edit, approval, rejection, and reopen is stored with the actor, note, and b
 
 ## Verification
 
+### V1 decision capture smoke test
+
+This documentation change verifies merged pull request ingestion and decision review.
+
 Recommended local verification:
 
 ```bash
