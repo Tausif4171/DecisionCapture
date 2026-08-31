@@ -288,7 +288,7 @@ test("GitHub issue selection and synchronization update without a page reload", 
         url: issueUrl,
         normalizedUrl: issueUrl,
         title: synchronized ? issueTitle : `${repository}#21`,
-        description: synchronized ? "Disposable test issue for V2 Phase 2." : null,
+        description: synchronized ? "## Problem\n\nDisposable test issue for V2 Phase 2." : null,
         status: "ACTIVE",
         metadata: synchronized
           ? {
@@ -404,6 +404,8 @@ test("GitHub issue selection and synchronization update without a page reload", 
   await expect(page.getByText("Syncing", { exact: true })).toBeVisible();
   await expect(page.getByText("Synced", { exact: true })).toBeVisible();
   await expect(page.getByRole("link", { name: issueTitle })).toBeVisible();
+  await expect(page.getByText("## Problem", { exact: true })).toHaveCount(0);
+  await expect(page.getByText("Disposable test issue for V2 Phase 2.", { exact: true })).toBeVisible();
   await expect(page.getByText("1 comment", { exact: true })).toBeVisible();
   await expect(page.getByText("1 comments", { exact: true })).toHaveCount(0);
   await expect(issueMenu).toContainText("Select a GitHub issue");
