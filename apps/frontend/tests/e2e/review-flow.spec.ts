@@ -239,7 +239,7 @@ test("manual GitHub context linking remains durable without a connected integrat
   await page.goto(`/decisions/${seededDecision.id}`);
   await expect(page.getByText("GitHub App is not configured.")).toBeVisible();
 
-  await page.getByPlaceholder("https://github.com/org/repo/issues/42").fill(issueUrl);
+  await page.getByLabel("Issue URL").fill(issueUrl);
   await page.getByRole("button", { name: "Link context" }).click();
 
   await expect(page.getByRole("link", { name: contextTitle })).toBeVisible();
@@ -248,7 +248,7 @@ test("manual GitHub context linking remains durable without a connected integrat
   await page.reload();
   await expect(page.getByRole("link", { name: contextTitle })).toBeVisible();
 
-  await page.getByPlaceholder("https://github.com/org/repo/issues/42").fill(issueUrl);
+  await page.getByLabel("Issue URL").fill(issueUrl);
   await page.getByRole("button", { name: "Link context" }).click();
   await expect(page.getByText("External context is already linked to this decision")).toBeVisible();
 
@@ -257,4 +257,164 @@ test("manual GitHub context linking remains durable without a connected integrat
 
   await page.reload();
   await expect(page.getByRole("link", { name: contextTitle })).toHaveCount(0);
+});
+
+test("GitHub issue selection and synchronization update without a page reload", async ({ page }) => {
+  const seededDecision = await seedPendingDecision();
+  const repository = "Tausif4171/DecisionCapture";
+  const issueTitle = "[E2E] DecisionCapture GitHub context sync";
+  const issueUrl = "https://github.com/Tausif4171/DecisionCapture/issues/21";
+  const now = new Date().toISOString();
+  let linked = false;
+  let synchronizedReads = 0;
+
+  function contextLink(status: "SYNCING" | "SYNCED") {
+    const synchronized = status === "SYNCED";
+
+    return {
+      id: "github-link-21",
+      decisionId: seededDecision.id,
+      externalContextId: "github-context-21",
+      relationshipType: "RELATED",
+      createdByLogin: "Tausif4171",
+      createdAt: now,
+      updatedAt: now,
+      context: {
+        id: "github-context-21",
+        provider: "GITHUB",
+        type: "ISSUE",
+        providerAccountId: repository.toLowerCase(),
+        externalId: "issue:21",
+        url: issueUrl,
+        normalizedUrl: issueUrl,
+        title: synchronized ? issueTitle : `${repository}#21`,
+        description: synchronized ? "Disposable test issue for V2 Phase 2." : null,
+        status: "ACTIVE",
+        metadata: synchronized
+          ? {
+              owner: "Tausif4171",
+              repo: "DecisionCapture",
+              repository,
+              issueNumber: 21,
+              githubIssueId: 21,
+              nodeId: "issue-node-21",
+              state: "open",
+              stateReason: null,
+              authorLogin: "Tausif4171",
+              authorAvatarUrl: null,
+              labels: [{ name: "phase2-test", color: "ededed" }],
+              commentCount: 1,
+              recentComments: [
+                {
+                  id: 1,
+                  authorLogin: "Tausif4171",
+                  body: "Initial comment for the DecisionCapture GitHub context sync test.",
+                  url: `${issueUrl}#issuecomment-1`,
+                  createdAt: now,
+                  updatedAt: now
+                }
+              ],
+              githubCreatedAt: now,
+              githubUpdatedAt: now
+            }
+          : { owner: "Tausif4171", repo: "DecisionCapture", issueNumber: 21 },
+        lastSyncedAt: synchronized ? now : null,
+        sync: {
+          status,
+          lastAttemptAt: now,
+          lastSuccessAt: synchronized ? now : null,
+          error: null
+        },
+        createdAt: now,
+        updatedAt: now
+      }
+    };
+  }
+
+  await page.route(`${API_URL}/contexts/providers/github/connection`, async (route) => {
+    await route.fulfill({
+      json: {
+        configured: true,
+        connected: true,
+        installationId: "123",
+        accountLogin: "Tausif4171",
+        repositorySelection: "selected",
+        status: "ACTIVE"
+      }
+    });
+  });
+  await page.route(`${API_URL}/contexts/providers/github/repositories`, async (route) => {
+    await route.fulfill({
+      json: [{ id: 1, fullName: repository, private: false, url: `https://github.com/${repository}` }]
+    });
+  });
+  await page.route(`${API_URL}/contexts/providers/github/issues**`, async (route) => {
+    await route.fulfill({
+      json: [
+        {
+          id: 21,
+          number: 21,
+          repository,
+          title: issueTitle,
+          state: "open",
+          url: issueUrl,
+          authorLogin: "Tausif4171",
+          labels: ["phase2-test"],
+          updatedAt: now
+        }
+      ]
+    });
+  });
+  await page.route(`${API_URL}/decisions/${seededDecision.id}/contexts`, async (route) => {
+    if (route.request().method() === "POST") {
+      linked = true;
+      synchronizedReads = 0;
+      await route.fulfill({ status: 201, json: contextLink("SYNCING") });
+      return;
+    }
+
+    if (!linked) {
+      await route.fulfill({ json: [] });
+      return;
+    }
+
+    synchronizedReads += 1;
+    await route.fulfill({
+      json: [contextLink(synchronizedReads > 1 ? "SYNCED" : "SYNCING")]
+    });
+  });
+
+  await page.goto(`/decisions/${seededDecision.id}`);
+
+  const issueMenu = page.getByRole("button", { name: "GitHub issue", exact: true });
+  const issueUrlInput = page.getByLabel("Issue URL");
+  const linkButton = page.getByRole("button", { name: "Link context" });
+
+  await expect(issueMenu).toContainText("Select a GitHub issue");
+  await expect(issueUrlInput).toHaveValue("");
+  await expect(linkButton).toBeDisabled();
+
+  await issueMenu.click();
+  await page.getByRole("option", { name: `#21 ${issueTitle}` }).click();
+
+  await expect(issueUrlInput).toHaveValue(issueUrl);
+  await expect(linkButton).toBeEnabled();
+  await linkButton.click();
+
+  await expect(page.getByText("Syncing", { exact: true })).toBeVisible();
+  await expect(page.getByText("Synced", { exact: true })).toBeVisible();
+  await expect(page.getByRole("link", { name: issueTitle })).toBeVisible();
+  await expect(page.getByText("1 comment", { exact: true })).toBeVisible();
+  await expect(page.getByText("1 comments", { exact: true })).toHaveCount(0);
+  await expect(issueMenu).toContainText("Select a GitHub issue");
+  await expect(issueUrlInput).toHaveValue("");
+
+  await page.setViewportSize({ width: 390, height: 844 });
+  await expect
+    .poll(() =>
+      page.evaluate(
+        () => document.documentElement.scrollWidth <= document.documentElement.clientWidth
+      )
+    )
+    .toBe(true);
 });
