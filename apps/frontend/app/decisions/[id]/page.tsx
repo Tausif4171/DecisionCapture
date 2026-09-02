@@ -145,6 +145,19 @@ function contextTitle(link: DecisionContextLink) {
   return link.context.title ?? link.context.normalizedUrl;
 }
 
+function contextDescriptionPreview(description: string) {
+  return description
+    .replace(/```[\s\S]*?```/g, " ")
+    .replace(/!\[([^\]]*)\]\([^)]+\)/g, "$1")
+    .replace(/\[([^\]]+)\]\([^)]+\)/g, "$1")
+    .replace(/^\s{0,3}#{1,6}\s+.*$/gm, " ")
+    .replace(/^\s*[-*+]\s+/gm, "")
+    .replace(/^\s*\d+\.\s+/gm, "")
+    .replace(/`([^`]+)`/g, "$1")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
 function githubIssueMetadata(link: DecisionContextLink) {
   if (link.context.provider !== "GITHUB" || !link.context.metadata) {
     return null;
@@ -601,6 +614,9 @@ export default function DecisionDetailPage() {
               <ul className="space-y-2">
                 {contextLinks.map((link) => {
                   const githubMetadata = githubIssueMetadata(link);
+                  const descriptionPreview = link.context.description
+                    ? contextDescriptionPreview(link.context.description)
+                    : "";
                   const syncStatus = link.context.sync?.status;
                   const syncProblem =
                     link.context.status === "UNAVAILABLE" ||
@@ -676,9 +692,9 @@ export default function DecisionDetailPage() {
                           ) : null}
                         </div>
                       </div>
-                      {link.context.description ? (
-                        <p className="mt-2 line-clamp-3 whitespace-pre-wrap text-xs leading-5 text-neutral-600">
-                          {link.context.description}
+                      {descriptionPreview ? (
+                        <p className="mt-2 line-clamp-3 break-words text-xs leading-5 text-neutral-600">
+                          {descriptionPreview}
                         </p>
                       ) : null}
                       {githubMetadata ? (
