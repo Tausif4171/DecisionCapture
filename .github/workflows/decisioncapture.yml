@@ -59,16 +59,19 @@ jobs:
             --data @payload.json \
             > decisioncapture-response.json
 
-          status=$(jq -r '.status // "unknown"' decisioncapture-response.json)
+          status=$(jq -r '.status // empty' decisioncapture-response.json)
           message=$(jq -r '.message // ""' decisioncapture-response.json)
+
+          if [ -z "$status" ]; then
+            status="unknown"
+          fi
 
           echo "DecisionCapture ingestion status: $status"
           echo "DecisionCapture message: $message"
-          {
-            echo "### DecisionCapture ingestion"
-            echo "- Status: `$status`"
-            echo "- Message: $message"
-          } >> "$GITHUB_STEP_SUMMARY"
+          printf '%s\n' \
+            "### DecisionCapture ingestion" \
+            "- Status: $status" \
+            "- Message: $message" >> "$GITHUB_STEP_SUMMARY"
 
           case "$status" in
             processed)
