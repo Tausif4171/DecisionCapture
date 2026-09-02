@@ -20,6 +20,7 @@ import type { AIProvider } from "../ai/provider.js";
 import { privilegedRoles, reopenRoles, type ReviewActor } from "../auth/types.js";
 import { assessExplanationEvidence, MISSING_REASON } from "./evidence.js";
 import { resolveDecisionStatus, scoreDecisionContext } from "./scoring.js";
+import { parseStructuredSections } from "./structured-sections.js";
 import type {
   DecisionRejectInput,
   DecisionReopenInput,
@@ -206,13 +207,23 @@ export class DecisionService {
     });
 
     const extracted = await this.aiProvider.extractDecision(context, score);
+    const structuredBody = parseStructuredSections(context.description ?? "");
+    const extractedDecision = {
+      ...extracted,
+      decision: structuredBody.decision ?? extracted.decision,
+      reason: structuredBody.reason ?? extracted.reason,
+      alternative: structuredBody.alternative ?? extracted.alternative,
+      impact: structuredBody.impact ?? extracted.impact
+    };
     const evidence = assessExplanationEvidence(context);
     const missingExplicitReason = !evidence.hasExplicitReason;
     const confidence = missingExplicitReason
-      ? Math.min(extracted.confidence, 0.49)
-      : extracted.confidence;
+      ? Math.min(extractedDecision.confidence, 0.49)
+      : extractedDecision.confidence;
     const status = (
-      missingExplicitReason || extracted.extractionMethod === "STRUCTURED_FALLBACK" || !env.AUTO_APPROVAL_ENABLED
+      missingExplicitReason ||
+      extractedDecision.extractionMethod === "STRUCTURED_FALLBACK" ||
+      !env.AUTO_APPROVAL_ENABLED
         ? "PENDING"
         : resolveDecisionStatus(confidence, env.AUTO_APPROVE_CONFIDENCE)
     ) as DecisionStatus;
@@ -223,18 +234,18 @@ export class DecisionService {
     });
 
     const decisionPayload = {
-      decision: extracted.decision,
-      reason: missingExplicitReason ? MISSING_REASON : extracted.reason,
-      alternative: extracted.alternative,
-      impact: extracted.impact,
-      author: extracted.author,
-      sourcePR: extracted.source,
+      decision: extractedDecision.decision,
+      reason: missingExplicitReason ? MISSING_REASON : extractedDecision.reason,
+      alternative: extractedDecision.alternative,
+      impact: extractedDecision.impact,
+      author: extractedDecision.author,
+      sourcePR: extractedDecision.source,
       repository: context.repository,
       filesChanged: context.filesChanged,
       confidence,
       status,
-      category: extracted.category,
-      extractionMethod: extracted.extractionMethod,
+      category: extractedDecision.category,
+      extractionMethod: extractedDecision.extractionMethod,
       approvedByUserId: null,
       approvedByLogin: null,
       approvedAt: null,
