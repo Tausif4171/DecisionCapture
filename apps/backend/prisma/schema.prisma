@@ -26,6 +26,7 @@ enum DecisionAuditAction {
   APPROVED
   REJECTED
   REOPENED
+  CONTEXT_LINKED
 }
 
 enum DecisionExtractionMethod {
