@@ -66,6 +66,10 @@ export type CreateDecisionContextLinkInput = {
   type?: ExternalContextType;
 };
 
+type CreateDecisionContextLinkOptions = {
+  createdByLogin?: string;
+};
+
 function normalizeLogin(login: string | null | undefined) {
   return login?.trim().toLowerCase() ?? "";
 }
@@ -204,7 +208,8 @@ export class ContextService {
   async createDecisionContextLink(
     decisionId: string,
     input: CreateDecisionContextLinkInput,
-    actor: ReviewActor = { authRequired: false }
+    actor: ReviewActor = { authRequired: false },
+    options: CreateDecisionContextLinkOptions = {}
   ): Promise<DecisionContextLinkResponse> {
     await this.requireDecisionContextMutationAccess(decisionId, actor);
 
@@ -243,7 +248,7 @@ export class ContextService {
             externalContextId: externalContext.id,
             relationshipType: input.relationshipType ?? "RELATED",
             createdByUserId: actor.user?.id,
-            createdByLogin: actorLogin(actor)
+            createdByLogin: options.createdByLogin ?? actorLogin(actor)
           },
           include: {
             externalContext: {
