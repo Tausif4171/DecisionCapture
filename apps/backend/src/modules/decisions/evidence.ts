@@ -1,4 +1,5 @@
 import type { PRContext } from "@decisioncapture/shared";
+import { parseStructuredSections } from "./structured-sections.js";
 
 export const MISSING_REASON =
   "The PR context did not state an explicit reason. Reviewer confirmation is required.";
@@ -30,11 +31,12 @@ function normalizeEvidenceText(value: string | undefined) {
 function hasSubstantiveReasoning(value: string | undefined) {
   const text = normalizeEvidenceText(value);
 
-  if (text.length < 40) {
-    return false;
+  if (text.length >= 40 && (STRUCTURED_REASON_PATTERN.test(text) || CAUSAL_LANGUAGE_PATTERN.test(text))) {
+    return true;
   }
 
-  return STRUCTURED_REASON_PATTERN.test(text) || CAUSAL_LANGUAGE_PATTERN.test(text);
+  const markdownReason = parseStructuredSections(value ?? "").reason;
+  return Boolean(markdownReason && markdownReason.length >= 40);
 }
 
 export function assessExplanationEvidence(context: PRContext): ExplanationEvidence {

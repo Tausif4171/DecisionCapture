@@ -203,6 +203,7 @@ JSON shape:
 
 Confidence must be a decimal from 0 to 1, for example 0.82. Never return 82 or "82%".
 Only use reasoning that is explicitly present in the PR description or review conversation.
+Treat both inline labels such as "Reason:" and Markdown sections such as "## Reason" as explicit PR context.
 Do not invent a reason from file names, diff size, commits, labels, or generic engineering assumptions.
 If the PR does not explicitly say why the change was made, set reason exactly to:
 "${MISSING_REASON}"

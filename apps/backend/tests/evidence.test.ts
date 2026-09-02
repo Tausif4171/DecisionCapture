@@ -36,6 +36,53 @@ describe("assessExplanationEvidence", () => {
     });
   });
 
+  it("accepts substantive reasoning under a Markdown Reason heading", () => {
+    expect(
+      assessExplanationEvidence(
+        context({
+          description: `## Decision
+Automatically link explicit GitHub issue references.
+
+## Reason
+The connected GitHub App and worker already process issue references, so users should not need to select the issue manually.
+
+## Alternative
+Require manual selection for every issue.`
+        })
+      )
+    ).toEqual({
+      hasExplicitReason: true,
+      source: "DESCRIPTION"
+    });
+  });
+
+  it("does not treat an unrelated Markdown heading as explanation evidence", () => {
+    expect(
+      assessExplanationEvidence(
+        context({
+          description:
+            "## Notes\nThis is a long implementation note describing files, commands, and rollout details only."
+        })
+      )
+    ).toEqual({
+      hasExplicitReason: false,
+      source: "MISSING"
+    });
+  });
+
+  it("ignores Markdown headings inside fenced examples", () => {
+    expect(
+      assessExplanationEvidence(
+        context({
+          description: "```markdown\n## Reason\nThis is only an example and is not the PR rationale.\n```"
+        })
+      )
+    ).toEqual({
+      hasExplicitReason: false,
+      source: "MISSING"
+    });
+  });
+
   it("accepts reasoning from review discussion when the description is empty", () => {
     expect(
       assessExplanationEvidence(
@@ -67,4 +114,3 @@ describe("assessExplanationEvidence", () => {
     });
   });
 });
-
