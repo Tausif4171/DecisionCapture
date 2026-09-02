@@ -33,6 +33,18 @@ describe("extractGitHubIssueReferences", () => {
     ).toEqual(["https://github.com/acme/platform/issues/91"]);
   });
 
+  it("accepts case-insensitive closing keywords with punctuation", () => {
+    expect(
+      extractGitHubIssueReferences(
+        "FIXED #78, resolves #79.",
+        "acme/platform"
+      )
+    ).toEqual([
+      "https://github.com/acme/platform/issues/78",
+      "https://github.com/acme/platform/issues/79"
+    ]);
+  });
+
   it("ignores bare issue numbers, pull requests, and code examples", () => {
     const body = [
       "Issue #21 is discussed here.",
