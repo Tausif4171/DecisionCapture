@@ -120,7 +120,7 @@ export function SelectMenu({
           id={menuId}
           role="listbox"
           aria-labelledby={labelId}
-          className="absolute left-0 top-[calc(100%+0.375rem)] z-30 w-full min-w-44 overflow-hidden rounded-md border border-neutral-200 bg-white p-1 shadow-lg"
+          className="absolute left-0 top-[calc(100%+0.375rem)] z-30 w-full min-w-44 max-h-[min(20rem,calc(100vh-8rem))] overflow-x-hidden overflow-y-auto overscroll-contain rounded-md border border-neutral-200 bg-white p-1 shadow-lg"
         >
           {options.map((option) => {
             const selected = option.value === selectedOption?.value;
