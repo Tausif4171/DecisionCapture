@@ -13,6 +13,18 @@ async function syncDecisionNotification(context: PRContext, decision: DecisionMe
   }
 }
 
+async function autoLinkDecisionContext(context: PRContext, decision: DecisionMemory) {
+  try {
+    const { autoLinkGitHubIssueReferences } = await import("../contexts/auto-link.service.js");
+    await autoLinkGitHubIssueReferences(decision.id, context);
+  } catch (error) {
+    logger.error(
+      { error, decisionId: decision.id, prNumber: context.prNumber },
+      "Automatic GitHub issue linking failed"
+    );
+  }
+}
+
 export async function processDecisionContext(context: PRContext): Promise<AnalyzeResponse> {
   const result = await decisionService.analyzePrContext(context);
 
@@ -20,6 +32,7 @@ export async function processDecisionContext(context: PRContext): Promise<Analyz
     return result;
   }
 
+  await autoLinkDecisionContext(context, result.decision);
   await syncDecisionNotification(context, result.decision);
   return result;
 }

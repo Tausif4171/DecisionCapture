@@ -9,6 +9,10 @@ const mockGitHubService = vi.hoisted(() => ({
   syncDecisionReviewComment: vi.fn()
 }));
 
+const mockAutoLinkService = vi.hoisted(() => ({
+  autoLinkGitHubIssueReferences: vi.fn()
+}));
+
 const mockPrisma = vi.hoisted(() => ({
   pullRequestRecord: {
     findUnique: vi.fn()
@@ -20,6 +24,8 @@ vi.mock("../src/modules/decisions/service.js", () => ({
 }));
 
 vi.mock("../src/modules/github/service.js", () => mockGitHubService);
+
+vi.mock("../src/modules/contexts/auto-link.service.js", () => mockAutoLinkService);
 
 vi.mock("../src/modules/database/prisma.js", () => ({
   prisma: mockPrisma
@@ -74,6 +80,7 @@ function buildDecision(overrides: Partial<DecisionMemory> = {}): DecisionMemory 
 describe("decision processing orchestration", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mockAutoLinkService.autoLinkGitHubIssueReferences.mockResolvedValue({ linked: 0, skipped: 0 });
   });
 
   it("syncs GitHub review comments after a pending decision is processed", async () => {
@@ -89,6 +96,10 @@ describe("decision processing orchestration", () => {
     const result = await processDecisionContext(context);
 
     expect(mockDecisionService.analyzePrContext).toHaveBeenCalledWith(context);
+    expect(mockAutoLinkService.autoLinkGitHubIssueReferences).toHaveBeenCalledWith(
+      "decision-88",
+      context
+    );
     expect(mockGitHubService.syncDecisionReviewComment).toHaveBeenCalledWith({
       context,
       decision
@@ -110,6 +121,7 @@ describe("decision processing orchestration", () => {
     const result = await processDecisionContext(buildContext());
 
     expect(mockGitHubService.syncDecisionReviewComment).not.toHaveBeenCalled();
+    expect(mockAutoLinkService.autoLinkGitHubIssueReferences).not.toHaveBeenCalled();
     expect(result.status).toBe("ignored");
   });
 
@@ -131,6 +143,33 @@ describe("decision processing orchestration", () => {
       decision: {
         id: "decision-88"
       }
+    });
+  });
+
+  it("keeps the decision processed when automatic issue linking fails", async () => {
+    const context = buildContext();
+    const decision = buildDecision();
+
+    mockDecisionService.analyzePrContext.mockResolvedValue({
+      status: "processed",
+      decision,
+      message: "Decision memory needs author review before approval"
+    });
+    mockAutoLinkService.autoLinkGitHubIssueReferences.mockRejectedValue(
+      new Error("GitHub issue lookup failed")
+    );
+
+    const result = await processDecisionContext(context);
+
+    expect(result).toMatchObject({
+      status: "processed",
+      decision: {
+        id: "decision-88"
+      }
+    });
+    expect(mockGitHubService.syncDecisionReviewComment).toHaveBeenCalledWith({
+      context,
+      decision
     });
   });
 
