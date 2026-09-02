@@ -46,6 +46,40 @@ describe("scoreDecisionContext", () => {
 
     expect(result.shouldAnalyze).toBe(false);
   });
+
+  it("ignores a small visual UI polish change across component and stylesheet files", () => {
+    const result = scoreDecisionContext(
+      {
+        ...baseContext,
+        title: "Tighten linked context card spacing",
+        description: "Reduce visual whitespace in the linked context card.",
+        filesChanged: [
+          "apps/frontend/app/components/linked-context-card.tsx",
+          "apps/frontend/app/globals.css"
+        ]
+      },
+      35
+    );
+
+    expect(result.shouldAnalyze).toBe(false);
+    expect(result.score).toBe(0);
+    expect(result.categories).toEqual([]);
+  });
+
+  it("keeps a small UI behavior change below the threshold unless it has technical signals", () => {
+    const result = scoreDecisionContext(
+      {
+        ...baseContext,
+        title: "Keep the issue picker selection stable",
+        description: "Preserve the selected issue while the context card refreshes.",
+        filesChanged: ["apps/frontend/app/components/github-issue-picker.tsx"]
+      },
+      35
+    );
+
+    expect(result.shouldAnalyze).toBe(false);
+    expect(result.score).toBe(0);
+  });
 });
 
 describe("resolveDecisionStatus", () => {

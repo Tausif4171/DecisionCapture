@@ -92,7 +92,8 @@ function formatAuditAction(action: string, actorLogin?: string | null) {
     EDITED: `Draft edited by ${actor}`,
     APPROVED: `Approved by ${actor}`,
     REJECTED: `Rejected by ${actor}`,
-    REOPENED: `Review reopened by ${actor}`
+    REOPENED: `Review reopened by ${actor}`,
+    CONTEXT_LINKED: `GitHub context linked by ${actor}`
   };
 
   return labels[action] ?? action.toLowerCase().replace("_", " ");

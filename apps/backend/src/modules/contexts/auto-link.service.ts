@@ -45,7 +45,13 @@ export async function autoLinkGitHubIssueReferences(decisionId: string, context:
           description: snapshot.description ?? undefined
         },
         { authRequired: false },
-        { createdByLogin: "DecisionCapture" }
+        {
+          createdByLogin: "DecisionCapture",
+          audit: {
+            action: "CONTEXT_LINKED",
+            note: `Automatically linked from merged PR #${context.prNumber}.`
+          }
+        }
       );
       linked += 1;
     } catch (error) {

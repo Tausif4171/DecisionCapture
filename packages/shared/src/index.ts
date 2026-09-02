@@ -1,6 +1,12 @@
 export type DecisionStatus = "APPROVED" | "PENDING" | "REJECTED";
 export type UserRole = "ADMIN" | "MAINTAINER" | "REVIEWER" | "VIEWER";
-export type DecisionAuditAction = "CREATED" | "EDITED" | "APPROVED" | "REJECTED" | "REOPENED";
+export type DecisionAuditAction =
+  | "CREATED"
+  | "EDITED"
+  | "APPROVED"
+  | "REJECTED"
+  | "REOPENED"
+  | "CONTEXT_LINKED";
 export type DecisionExtractionMethod = "OLLAMA" | "STRUCTURED_FALLBACK" | "UNKNOWN";
 export type ContextProvider = "GITHUB" | "LINEAR" | "JIRA" | "GENERIC";
 export type ExternalContextType = "ISSUE" | "ADR" | "ARCHITECTURE_DOC" | "MEETING";

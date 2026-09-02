@@ -68,6 +68,10 @@ export type CreateDecisionContextLinkInput = {
 
 type CreateDecisionContextLinkOptions = {
   createdByLogin?: string;
+  audit?: {
+    action: "CONTEXT_LINKED";
+    note?: string;
+  };
 };
 
 function normalizeLogin(login: string | null | undefined) {
@@ -242,7 +246,7 @@ export class ContextService {
           throw new HttpError(409, "External context is already linked to this decision");
         }
 
-        return tx.decisionContextLink.create({
+        const createdLink = await tx.decisionContextLink.create({
           data: {
             decisionId,
             externalContextId: externalContext.id,
@@ -256,6 +260,20 @@ export class ContextService {
             }
           }
         });
+
+        if (options.audit) {
+          await tx.decisionAuditLog.create({
+            data: {
+              decisionId,
+              action: options.audit.action,
+              actorUserId: actor.user?.id,
+              actorLogin: options.createdByLogin ?? actorLogin(actor),
+              note: options.audit.note
+            }
+          });
+        }
+
+        return createdLink;
       });
 
       if (link.externalContext.provider === "GITHUB" && link.externalContext.type === "ISSUE") {

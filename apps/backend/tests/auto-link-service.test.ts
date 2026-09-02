@@ -88,7 +88,13 @@ describe("autoLinkGitHubIssueReferences", () => {
         description: "Keep related context attached to the decision."
       },
       { authRequired: false },
-      { createdByLogin: "DecisionCapture" }
+      {
+        createdByLogin: "DecisionCapture",
+        audit: {
+          action: "CONTEXT_LINKED",
+          note: "Automatically linked from merged PR #21."
+        }
+      }
     );
   });
 

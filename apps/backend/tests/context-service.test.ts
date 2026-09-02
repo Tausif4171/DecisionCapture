@@ -15,6 +15,9 @@ const mockPrisma = vi.hoisted(() => ({
     findUnique: vi.fn(),
     create: vi.fn(),
     delete: vi.fn()
+  },
+  decisionAuditLog: {
+    create: vi.fn()
   }
 }));
 
@@ -189,6 +192,40 @@ describe("ContextService", () => {
       }
     });
     expect(queueMock.enqueueContextSync).toHaveBeenCalledWith("context-1");
+  });
+
+  it("records audit provenance when an internal flow creates a context link", async () => {
+    const service = new ContextService();
+    const externalContext = buildExternalContext();
+    const link = buildContextLink({ externalContext });
+
+    mockPrisma.decisionMemory.findUnique.mockResolvedValue(buildDecision());
+    mockPrisma.externalContext.upsert.mockResolvedValue(externalContext);
+    mockPrisma.decisionContextLink.findUnique.mockResolvedValue(null);
+    mockPrisma.decisionContextLink.create.mockResolvedValue(link);
+
+    await service.createDecisionContextLink(
+      "decision-42",
+      { url: "https://github.com/acme/platform/issues/91" },
+      { authRequired: false },
+      {
+        createdByLogin: "DecisionCapture",
+        audit: {
+          action: "CONTEXT_LINKED",
+          note: "Automatically linked from merged PR #42."
+        }
+      }
+    );
+
+    expect(mockPrisma.decisionAuditLog.create).toHaveBeenCalledWith({
+      data: {
+        decisionId: "decision-42",
+        action: "CONTEXT_LINKED",
+        actorUserId: undefined,
+        actorLogin: "DecisionCapture",
+        note: "Automatically linked from merged PR #42."
+      }
+    });
   });
 
   it("retrieves context links for a decision", async () => {

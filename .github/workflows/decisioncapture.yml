@@ -58,3 +58,30 @@ jobs:
             -H "x-decisioncapture-token: $DECISIONCAPTURE_TOKEN" \
             --data @payload.json \
             > decisioncapture-response.json
+
+          status=$(jq -r '.status // "unknown"' decisioncapture-response.json)
+          message=$(jq -r '.message // ""' decisioncapture-response.json)
+
+          echo "DecisionCapture ingestion status: $status"
+          echo "DecisionCapture message: $message"
+          {
+            echo "### DecisionCapture ingestion"
+            echo "- Status: `$status`"
+            echo "- Message: $message"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+          case "$status" in
+            processed)
+              echo "DecisionCapture processed this PR and created or updated a decision."
+              ;;
+            ignored)
+              echo "DecisionCapture intentionally ignored this PR because it did not cross the decision threshold."
+              ;;
+            queued)
+              echo "DecisionCapture queued this PR for asynchronous BullMQ processing."
+              ;;
+            *)
+              echo "::error::DecisionCapture returned an unexpected status: $status"
+              exit 1
+              ;;
+          esac
