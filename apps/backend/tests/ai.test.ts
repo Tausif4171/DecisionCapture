@@ -55,6 +55,33 @@ describe("HeuristicAIProvider", () => {
     expect(extracted.confidence).toBeLessThan(0.7);
   });
 
+  it("extracts the canonical sections when they use Markdown headings", async () => {
+    const extracted = await new HeuristicAIProvider().extractDecision(
+      context({
+        description: `## Decision
+Use the shared privileged role policy for decision review authorization.
+
+## Reason
+Admin, maintainer, and reviewer access should be defined in one place so permission rules remain consistent.
+
+## Alternative
+Keep a separate hardcoded role list inside DecisionService.
+
+## Impact
+RBAC rules become easier to maintain and less likely to drift across authorization paths.`
+      }),
+      score
+    );
+
+    expect(extracted).toMatchObject({
+      decision: "Use the shared privileged role policy for decision review authorization.",
+      reason:
+        "Admin, maintainer, and reviewer access should be defined in one place so permission rules remain consistent.",
+      alternative: "Keep a separate hardcoded role list inside DecisionService.",
+      impact: "RBAC rules become easier to maintain and less likely to drift across authorization paths."
+    });
+  });
+
   it("uses the PR title and honest review placeholders when context is incomplete", async () => {
     const extracted = await new HeuristicAIProvider().extractDecision(
       context({
