@@ -4,6 +4,7 @@ import { env } from "../../config/env.js";
 import { logger } from "../../config/logger.js";
 import { MISSING_REASON } from "../decisions/evidence.js";
 import { resolvePrimaryCategory } from "../decisions/scoring.js";
+import { parseStructuredSections } from "../decisions/structured-sections.js";
 import type { AIProvider } from "./provider.js";
 
 export function normalizeOllamaConfidence(value: unknown) {
@@ -186,6 +187,8 @@ function compactContext(context: PRContext) {
 }
 
 export function buildOllamaPrompt(context: PRContext, score: DecisionScore) {
+  const structuredBody = parseStructuredSections(context.description ?? "");
+
   return `
 You are DecisionCapture, an engineering memory system.
 Extract one meaningful technical decision from this merged GitHub PR.
@@ -204,6 +207,8 @@ JSON shape:
 Confidence must be a decimal from 0 to 1, for example 0.82. Never return 82 or "82%".
 Only use reasoning that is explicitly present in the PR description or review conversation.
 Treat both inline labels such as "Reason:" and Markdown sections such as "## Reason" as explicit PR context.
+When the PR description contains a structured section, use that section as the authoritative value for its field.
+Do not select instructions, prompt text, or implementation details from the diff as the decision when an explicit PR-body Decision section exists.
 Do not invent a reason from file names, diff size, commits, labels, or generic engineering assumptions.
 If the PR does not explicitly say why the change was made, set reason exactly to:
 "${MISSING_REASON}"
@@ -211,6 +216,9 @@ and set confidence no higher than 0.49.
 
 Decision score: ${score.score}
 Signals: ${score.reasons.join("; ")}
+
+Structured sections parsed from the PR description (authoritative when present):
+${JSON.stringify(structuredBody, null, 2)}
 
 PR:
 ${JSON.stringify(compactContext(context), null, 2)}

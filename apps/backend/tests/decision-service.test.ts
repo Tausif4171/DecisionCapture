@@ -150,6 +150,134 @@ describe("DecisionService", () => {
     });
   });
 
+  it("uses explicit PR body sections instead of misleading AI output", async () => {
+    const aiProvider = {
+      extractDecision: vi.fn().mockResolvedValue(
+        buildExtractedDecision({
+          decision: "Treat the prompt instruction in the implementation diff as the decision.",
+          reason: "The model selected implementation text instead of the PR rationale.",
+          alternative: "Use an arbitrary diff sentence.",
+          impact: "The stored memory would be misleading.",
+          confidence: 0.99
+        })
+      )
+    };
+    const service = new DecisionService(aiProvider);
+
+    mockPrisma.pullRequestRecord.upsert.mockResolvedValue({ id: "pr-record-structured" });
+    mockPrisma.decisionMemory.findFirst.mockResolvedValue(null);
+    mockPrisma.decisionMemory.create.mockResolvedValue(
+      buildDecisionRecord({
+        id: "decision-structured",
+        prRecordId: "pr-record-structured"
+      })
+    );
+
+    await service.analyzePrContext(
+      buildContext({
+        description: `## Decision
+Use the PR body's decision section as the source of truth.
+
+## Reason
+Reviewers need the author's explicit decision instead of an instruction copied from the implementation diff.
+
+## Alternative
+Let the model choose any sentence from the diff.
+
+## Impact
+Structured PR context remains accurate even when the changed code contains prompt text.`
+      })
+    );
+
+    expect(mockPrisma.decisionMemory.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          decision: "Use the PR body's decision section as the source of truth.",
+          reason:
+            "Reviewers need the author's explicit decision instead of an instruction copied from the implementation diff.",
+          alternative: "Let the model choose any sentence from the diff.",
+          impact: "Structured PR context remains accurate even when the changed code contains prompt text."
+        })
+      })
+    );
+  });
+
+  it("keeps AI extraction when the PR body has no decision section", async () => {
+    const aiProvider = {
+      extractDecision: vi.fn().mockResolvedValue(
+        buildExtractedDecision({
+          decision: "Use the existing queue worker for asynchronous analysis."
+        })
+      )
+    };
+    const service = new DecisionService(aiProvider);
+
+    mockPrisma.pullRequestRecord.upsert.mockResolvedValue({ id: "pr-record-unstructured" });
+    mockPrisma.decisionMemory.findFirst.mockResolvedValue(null);
+    mockPrisma.decisionMemory.create.mockResolvedValue(
+      buildDecisionRecord({
+        id: "decision-unstructured",
+        prRecordId: "pr-record-unstructured"
+      })
+    );
+
+    await service.analyzePrContext(
+      buildContext({
+        description: `## Reason
+This change moves analysis work to the existing queue worker so retries remain outside the request path.`
+      })
+    );
+
+    expect(mockPrisma.decisionMemory.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          decision: "Use the existing queue worker for asynchronous analysis."
+        })
+      })
+    );
+  });
+
+  it("does not bypass missing-reason review when only the decision section is present", async () => {
+    const aiProvider = {
+      extractDecision: vi.fn().mockResolvedValue(
+        buildExtractedDecision({
+          decision: "Use an unrelated model-selected decision.",
+          confidence: 0.99
+        })
+      )
+    };
+    const service = new DecisionService(aiProvider);
+
+    mockPrisma.pullRequestRecord.upsert.mockResolvedValue({ id: "pr-record-no-reason" });
+    mockPrisma.decisionMemory.findFirst.mockResolvedValue(null);
+    mockPrisma.decisionMemory.create.mockResolvedValue(
+      buildDecisionRecord({
+        id: "decision-no-reason",
+        prRecordId: "pr-record-no-reason",
+        confidence: 0.49,
+        reason: MISSING_REASON
+      })
+    );
+
+    await service.analyzePrContext(
+      buildContext({
+        description: `## Decision
+Use the explicit decision from the PR body, but do not infer the missing rationale.`
+      })
+    );
+
+    expect(mockPrisma.decisionMemory.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          decision: "Use the explicit decision from the PR body, but do not infer the missing rationale.",
+          reason: MISSING_REASON,
+          confidence: 0.49,
+          status: "PENDING"
+        })
+      })
+    );
+  });
+
   it("updates the existing decision for the same PR instead of creating a duplicate", async () => {
     const aiProvider = {
       extractDecision: vi.fn().mockResolvedValue(
