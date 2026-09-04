@@ -271,6 +271,9 @@ For direct webhooks, set the GitHub webhook secret to match `GITHUB_WEBHOOK_SECR
 
 ### GitHub Issue Context
 
+For the production verification checklist, failure-injection guidance, and
+recovery procedures, see [V2 GitHub Integration Closeout](docs/v2-github-integration-runbook.md).
+
 After the GitHub App credentials are configured, an administrator or maintainer connects the installation from a decision's Linked context panel. The issue selector reads only repositories granted to that installation. Existing manual URL linking remains available when the integration is disconnected.
 
 Linking a GitHub issue creates the relationship first and then synchronizes metadata through the existing Redis/BullMQ infrastructure. The synchronization stores title, description, state, labels, author, comment count, up to 100 recent comments, and the last successful sync time. A GitHub API or queue failure does not remove the relationship. Deleted or inaccessible issues become unavailable while retaining their last known metadata.
