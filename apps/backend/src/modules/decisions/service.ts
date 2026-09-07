@@ -20,7 +20,7 @@ import type { AIProvider } from "../ai/provider.js";
 import { privilegedRoles, reopenRoles, type ReviewActor } from "../auth/types.js";
 import { assessExplanationEvidence, MISSING_REASON } from "./evidence.js";
 import { resolveDecisionStatus, scoreDecisionContext } from "./scoring.js";
-import { parseStructuredSections } from "./structured-sections.js";
+import { firstStructuredStatement, parseStructuredSections } from "./structured-sections.js";
 import type {
   DecisionRejectInput,
   DecisionReopenInput,
@@ -210,7 +210,10 @@ export class DecisionService {
     const structuredBody = parseStructuredSections(context.description ?? "");
     const extractedDecision = {
       ...extracted,
-      decision: structuredBody.decision ?? extracted.decision,
+      decision:
+        firstStructuredStatement(structuredBody.summary) ||
+        firstStructuredStatement(structuredBody.decision) ||
+        firstStructuredStatement(extracted.decision),
       reason: structuredBody.reason ?? extracted.reason,
       alternative: structuredBody.alternative ?? extracted.alternative,
       impact: structuredBody.impact ?? extracted.impact

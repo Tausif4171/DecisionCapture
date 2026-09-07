@@ -2,6 +2,7 @@ import type { DecisionScore, ExtractedDecision, PRContext } from "@decisioncaptu
 import { MISSING_IMPACT, MISSING_REASON } from "../decisions/evidence.js";
 import {
   cleanStructuredSection,
+  firstStructuredStatement,
   parseStructuredSections,
   type DecisionSections
 } from "../decisions/structured-sections.js";
@@ -15,6 +16,7 @@ function mergeSections(context: PRContext) {
     const parsed = parseStructuredSections(source);
 
     return {
+      summary: combined.summary ?? parsed.summary,
       decision: combined.decision ?? parsed.decision,
       reason: combined.reason ?? parsed.reason,
       alternative: combined.alternative ?? parsed.alternative,
@@ -35,7 +37,10 @@ export class HeuristicAIProvider implements AIProvider {
     const sections = mergeSections(context);
 
     return {
-      decision: sections.decision ?? cleanStructuredSection(context.title),
+      decision:
+        firstStructuredStatement(sections.summary) ||
+        firstStructuredStatement(sections.decision) ||
+        cleanStructuredSection(context.title),
       reason: sections.reason ?? MISSING_REASON,
       alternative: sections.alternative,
       impact: sections.impact ?? MISSING_IMPACT,

@@ -82,6 +82,24 @@ RBAC rules become easier to maintain and less likely to drift across authorizati
     });
   });
 
+  it("uses the concise Summary statement when a PR body contains a multi-bullet Decision section", async () => {
+    const extracted = await new HeuristicAIProvider().extractDecision(
+      context({
+        description: `## Summary
+Add the scoped relationship workflow.
+Approved decisions can be compared with earlier decisions.
+
+## Decision
+- Keep relationship analysis separate from V1 capture.
+- Treat AI output as a suggestion.
+- Require human review before acceptance.`
+      }),
+      score
+    );
+
+    expect(extracted.decision).toBe("Add the scoped relationship workflow.");
+  });
+
   it("uses the PR title and honest review placeholders when context is incomplete", async () => {
     const extracted = await new HeuristicAIProvider().extractDecision(
       context({

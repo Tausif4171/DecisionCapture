@@ -202,6 +202,48 @@ Structured PR context remains accurate even when the changed code contains promp
     );
   });
 
+  it("stores a concise title for a multi-bullet structured PR body", async () => {
+    const aiProvider = {
+      extractDecision: vi.fn().mockResolvedValue(
+        buildExtractedDecision({
+          decision: "The model returned the entire PR body as one title.",
+          confidence: 0.99
+        })
+      )
+    };
+    const service = new DecisionService(aiProvider);
+
+    mockPrisma.pullRequestRecord.upsert.mockResolvedValue({ id: "pr-record-summary" });
+    mockPrisma.decisionMemory.findFirst.mockResolvedValue(null);
+    mockPrisma.decisionMemory.create.mockResolvedValue(
+      buildDecisionRecord({
+        id: "decision-summary",
+        prRecordId: "pr-record-summary"
+      })
+    );
+
+    await service.analyzePrContext(
+      buildContext({
+        description: `## Summary
+Add the scoped relationship workflow.
+Approved decisions can be compared with earlier decisions.
+
+## Decision
+- Keep relationship analysis separate from V1 capture.
+- Treat AI output as a suggestion.
+- Require human review before acceptance.`
+      })
+    );
+
+    expect(mockPrisma.decisionMemory.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          decision: "Add the scoped relationship workflow."
+        })
+      })
+    );
+  });
+
   it("keeps AI extraction when the PR body has no decision section", async () => {
     const aiProvider = {
       extractDecision: vi.fn().mockResolvedValue(
