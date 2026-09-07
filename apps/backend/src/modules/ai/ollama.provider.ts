@@ -208,6 +208,8 @@ Confidence must be a decimal from 0 to 1, for example 0.82. Never return 82 or "
 Only use reasoning that is explicitly present in the PR description or review conversation.
 Treat both inline labels such as "Reason:" and Markdown sections such as "## Reason" as explicit PR context.
 When the PR description contains a structured section, use that section as the authoritative value for its field.
+When a concise Summary section exists, use its first statement as the decision title. Otherwise use the first substantive statement from the Decision section.
+Never concatenate multiple bullets or unrelated PR sections into the decision title.
 Do not select instructions, prompt text, or implementation details from the diff as the decision when an explicit PR-body Decision section exists.
 Do not invent a reason from file names, diff size, commits, labels, or generic engineering assumptions.
 If the PR does not explicitly say why the change was made, set reason exactly to:

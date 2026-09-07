@@ -1,10 +1,10 @@
-export type DecisionSectionKey = "decision" | "reason" | "alternative" | "impact";
+export type DecisionSectionKey = "summary" | "decision" | "reason" | "alternative" | "impact";
 
 export type DecisionSections = Partial<Record<DecisionSectionKey, string>>;
 
-const INLINE_SECTION_PATTERN = /\b(decision|reason|alternatives?|impact)\s*:/gi;
+const INLINE_SECTION_PATTERN = /\b(summary|decision|reason|alternatives?|impact)\s*:/gi;
 const MARKDOWN_SECTION_PATTERN =
-  /^ {0,3}#{1,6}\s+[*_`]*(decision|reason|alternatives?|impact)[*_`]*\s*:?\s*#*\s*$/gim;
+  /^ {0,3}#{1,6}\s+[*_`]*(summary|decision|reason|alternatives?|impact)[*_`]*\s*:?\s*#*\s*$/gim;
 
 function sectionKey(label: string | undefined): DecisionSectionKey | undefined {
   if (!label) {
@@ -27,6 +27,20 @@ export function cleanStructuredSection(value: string) {
     .replace(/^[\s\-–—]+/, "")
     .replace(/\s+/g, " ")
     .trim();
+}
+
+export function firstStructuredStatement(value: string | undefined) {
+  const cleaned = cleanStructuredSection(value ?? "");
+
+  if (!cleaned) {
+    return "";
+  }
+
+  const firstListItem = cleaned.split(/\s+(?=[-*]\s+)/)[0] ?? cleaned;
+  const firstSentence = firstListItem.match(/^.*?[.!?](?=\s|$)/)?.[0];
+  const statement = firstSentence ?? firstListItem;
+
+  return statement.length <= 240 ? statement : `${statement.slice(0, 237).trimEnd()}...`;
 }
 
 export function parseStructuredSections(text: string): DecisionSections {
