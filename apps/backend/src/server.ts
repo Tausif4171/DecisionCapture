@@ -3,6 +3,7 @@ import { logger } from "./config/logger.js";
 import { createApp } from "./app.js";
 import { startDecisionWorker } from "./modules/queue/queue.js";
 import { startContextWorker } from "./modules/contexts/queue.js";
+import { startRelationshipWorker } from "./modules/relationships/queue.js";
 
 const app = createApp();
 
@@ -15,6 +16,7 @@ if (env.QUEUE_MODE === "bullmq" && env.QUEUE_WORKER_ENABLED) {
   );
   startDecisionWorker();
   startContextWorker();
+  startRelationshipWorker();
 }
 
 app.listen(env.PORT, () => {

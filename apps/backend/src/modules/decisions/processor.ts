@@ -25,6 +25,54 @@ async function autoLinkDecisionContext(context: PRContext, decision: DecisionMem
   }
 }
 
+export async function scheduleRelationshipAnalysisForApprovedDecision(decision: DecisionMemory) {
+  if (decision.status !== "APPROVED") {
+    return;
+  }
+
+  try {
+    const { scheduleRelationshipAnalysis } = await import("../relationships/queue.js");
+    await scheduleRelationshipAnalysis(decision.id);
+  } catch (error) {
+    logger.error(
+      { error, decisionId: decision.id },
+      "Decision relationship analysis could not be scheduled"
+    );
+  }
+}
+
+export async function invalidateRelationshipsForReopenedDecision(decisionId: string) {
+  try {
+    const { decisionRelationshipService } = await import("../relationships/service.js");
+    await decisionRelationshipService.invalidateForReopenedDecision(decisionId);
+  } catch (error) {
+    logger.error(
+      { error, decisionId },
+      "Decision relationships could not be invalidated after review reopening"
+    );
+  }
+}
+
+export async function scheduleRelationshipAnalysisForApprovedDependents(decisionId: string) {
+  try {
+    const [{ decisionRelationshipService }, { scheduleRelationshipAnalysis }] = await Promise.all([
+      import("../relationships/service.js"),
+      import("../relationships/queue.js")
+    ]);
+    const sourceDecisionIds =
+      await decisionRelationshipService.staleApprovedSourcesForTarget(decisionId);
+
+    for (const sourceDecisionId of sourceDecisionIds) {
+      await scheduleRelationshipAnalysis(sourceDecisionId);
+    }
+  } catch (error) {
+    logger.error(
+      { error, decisionId },
+      "Dependent decision relationship analyses could not be scheduled"
+    );
+  }
+}
+
 export async function processDecisionContext(context: PRContext): Promise<AnalyzeResponse> {
   const result = await decisionService.analyzePrContext(context);
 
@@ -34,6 +82,7 @@ export async function processDecisionContext(context: PRContext): Promise<Analyz
 
   await autoLinkDecisionContext(context, result.decision);
   await syncDecisionNotification(context, result.decision);
+  await scheduleRelationshipAnalysisForApprovedDecision(result.decision);
   return result;
 }
 

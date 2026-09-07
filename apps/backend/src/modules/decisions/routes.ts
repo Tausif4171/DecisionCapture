@@ -19,6 +19,12 @@ import {
   rejectDecision,
   updateDecision
 } from "./controller.js";
+import {
+  acceptDecisionRelationship,
+  analyzeDecisionRelationships,
+  dismissDecisionRelationship,
+  getDecisionRelationships
+} from "../relationships/controller.js";
 
 export const decisionsRouter = Router();
 
@@ -29,6 +35,10 @@ const decisionRoutePaths = {
   contexts: "/:id/contexts",
   contextDetail: "/:id/contexts/:contextId",
   contextRefresh: "/:id/contexts/:contextId/refresh",
+  relationships: "/:id/relationships",
+  relationshipAnalysis: "/:id/relationships/analyze",
+  relationshipAccept: "/:id/relationships/:relationshipId/accept",
+  relationshipDismiss: "/:id/relationships/:relationshipId/dismiss",
   detail: "/:id",
   audit: "/:id/audit",
   approve: "/:id/approve",
@@ -44,6 +54,10 @@ decisionsRouter.get(decisionRoutePaths.contexts, asyncHandler(listDecisionContex
 decisionsRouter.post(decisionRoutePaths.contexts, asyncHandler(createDecisionContextLink));
 decisionsRouter.post(decisionRoutePaths.contextRefresh, asyncHandler(refreshDecisionContext));
 decisionsRouter.delete(decisionRoutePaths.contextDetail, asyncHandler(deleteDecisionContextLink));
+decisionsRouter.get(decisionRoutePaths.relationships, asyncHandler(getDecisionRelationships));
+decisionsRouter.post(decisionRoutePaths.relationshipAnalysis, asyncHandler(analyzeDecisionRelationships));
+decisionsRouter.patch(decisionRoutePaths.relationshipAccept, asyncHandler(acceptDecisionRelationship));
+decisionsRouter.patch(decisionRoutePaths.relationshipDismiss, asyncHandler(dismissDecisionRelationship));
 decisionsRouter.get(decisionRoutePaths.detail, asyncHandler(getDecision));
 decisionsRouter.get(decisionRoutePaths.audit, asyncHandler(listDecisionAuditLogs));
 decisionsRouter.patch(decisionRoutePaths.detail, asyncHandler(updateDecision));

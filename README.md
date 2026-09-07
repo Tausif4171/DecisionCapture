@@ -178,6 +178,9 @@ For non-Docker development, provide PostgreSQL and Redis matching `.env.example`
 | `USE_HEURISTIC_AI_FALLBACK` | Parses explicit Decision/Reason/Alternative/Impact PR sections if Ollama is unavailable. Fallback records always require review. |
 | `AUTO_APPROVAL_ENABLED` | Set to `false` when you want every captured memory to stay pending during a human-review rollout. |
 | `AUTO_APPROVE_CONFIDENCE` | Minimum extraction confidence for auto-approval. Auto-approval still requires explicit reasoning evidence in the PR description or discussion. |
+| `RELATIONSHIP_ANALYSIS_ENABLED` | Enables V3 decision relationship analysis. Defaults to `false` for a controlled rollout. |
+| `RELATIONSHIP_ANALYSIS_MAX_CANDIDATES` | Maximum approved decisions sent to relationship reasoning per analysis. Defaults to `12` and is capped at `25`. |
+| `RELATIONSHIP_CONFIDENCE_THRESHOLD` | Minimum confidence for related/builds-on suggestions. Defaults to `0.65`; supersession and conflict use stricter thresholds. |
 | `NEXT_PUBLIC_API_URL` | Browser-facing API base URL for the frontend. Use `/api` on Vercel so auth cookies stay same-origin. |
 | `API_INTERNAL_URL` | Server-side backend URL used by the frontend rewrite from `/api/*` to the backend. |
 
@@ -224,6 +227,10 @@ The response should show `"reachable": true` and `"modelAvailable": true`.
 - `PATCH /decisions/:id/approve` approves a pending decision and optional edits.
 - `PATCH /decisions/:id/reject` rejects a pending decision. The UI requires a rejection reason and stores it in the audit history.
 - `PATCH /decisions/:id/reopen` reopens an approved or rejected decision with a required audit reason. With GitHub auth enabled, only admins and maintainers may use it.
+- `GET /decisions/:id/relationships` returns V3 relationship analysis, suggestions, and confirmed relationships.
+- `POST /decisions/:id/relationships/analyze` queues relationship analysis for an approved decision.
+- `PATCH /decisions/:id/relationships/:relationshipId/accept` confirms a suggested relationship.
+- `PATCH /decisions/:id/relationships/:relationshipId/dismiss` dismisses a suggested relationship.
 - `GET/POST /decisions/:id/contexts` lists or creates external context links.
 - `DELETE /decisions/:id/contexts/:contextId` removes a decision-context relationship without deleting the shared external context.
 - `POST /decisions/:id/contexts/:contextId/refresh` queues a GitHub issue metadata refresh.
@@ -279,6 +286,22 @@ After the GitHub App credentials are configured, an administrator or maintainer 
 Linking a GitHub issue creates the relationship first and then synchronizes metadata through the existing Redis/BullMQ infrastructure. The synchronization stores title, description, state, labels, author, comment count, up to 100 recent comments, and the last successful sync time. A GitHub API or queue failure does not remove the relationship. Deleted or inaccessible issues become unavailable while retaining their last known metadata.
 
 GitHub installation access tokens are generated on the backend, cached only until shortly before expiry, and never stored in PostgreSQL or returned to the browser. Webhook deliveries are signature-verified and deduplicated by `X-GitHub-Delivery` before processing.
+
+## Decision Relationships
+
+V3 can compare a newly approved decision with a bounded set of earlier approved decisions from the same repository. It uses deterministic repository, file, category, text, and linked-context signals to select candidates before sending only those candidates to Ollama.
+
+The model may suggest `RELATED`, `BUILDS_ON`, `SUPERSEDES`, or `POSSIBLE_CONFLICT`. Suggestions include evidence and confidence, but they do not become engineering memory until an admin, maintainer, or reviewer accepts them. Dismissed suggestions are retained to prevent repeated noise. Reopening a connected decision makes active relationships stale and reapproval schedules reassessment.
+
+The feature is disabled by default. Enable it only after the database schema is applied and an Ollama model is reachable by both the backend and relationship worker:
+
+```env
+RELATIONSHIP_ANALYSIS_ENABLED=true
+RELATIONSHIP_ANALYSIS_MAX_CANDIDATES=12
+RELATIONSHIP_CONFIDENCE_THRESHOLD=0.65
+```
+
+Keep `QUEUE_MODE=bullmq` and a worker enabled in production. Relationship analysis runs on its own queue with concurrency `1`; failures are recorded for retry and do not block PR ingestion, decision review, or GitHub issue synchronization.
 
 ## Dashboard Auth and RBAC
 

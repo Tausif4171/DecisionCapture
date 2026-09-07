@@ -135,6 +135,18 @@ async function seedPendingDecision() {
   return decision;
 }
 
+async function approveSeededDecision(id: string) {
+  const response = await fetchWithRetry(`${API_URL}/decisions/${id}/approve`, {
+    method: "PATCH",
+    headers: { "content-type": "application/json" },
+    body: "{}"
+  });
+
+  if (!response.ok) {
+    throw new Error(`Approval request failed with ${response.status}`);
+  }
+}
+
 test("pending review can be saved as draft and approved separately", async ({ page }) => {
   const seededDecision = await seedPendingDecision();
   const editedDecision = "Updated draft decision for smoke test";
@@ -424,6 +436,116 @@ test("GitHub issue selection and synchronization update without a page reload", 
   await expect(page.getByText("1 comments", { exact: true })).toHaveCount(0);
   await expect(issueMenu).toContainText("Select a GitHub issue");
   await expect(issueUrlInput).toHaveValue("");
+
+  await page.setViewportSize({ width: 390, height: 844 });
+  await expect
+    .poll(() =>
+      page.evaluate(
+        () => document.documentElement.scrollWidth <= document.documentElement.clientWidth
+      )
+    )
+    .toBe(true);
+});
+
+test("relationship suggestions require review before becoming confirmed memory", async ({ page }) => {
+  const seededDecision = await seedPendingDecision();
+  await approveSeededDecision(seededDecision.id);
+
+  const now = new Date().toISOString();
+  let analyzed = false;
+  let accepted = false;
+
+  function relationship(status: "SUGGESTED" | "ACCEPTED") {
+    return {
+      id: "relationship-e2e-1",
+      sourceDecisionId: seededDecision.id,
+      targetDecisionId: "decision-earlier",
+      type: "BUILDS_ON",
+      status,
+      confidence: 0.86,
+      explanation: "The newer queue decision extends the earlier asynchronous processing approach.",
+      evidence: [
+        "Both decisions keep expensive analysis outside the request path.",
+        "Both decisions use BullMQ-backed workers for retryable processing."
+      ],
+      analysisVersion: "v3.1",
+      direction: "OUTGOING",
+      relatedDecision: {
+        id: "decision-earlier",
+        decision: "Use BullMQ for asynchronous PR analysis",
+        reason: "PR ingestion should return quickly.",
+        impact: "Failed analysis can retry independently.",
+        category: "infrastructure",
+        repository: "Tausif4171/DecisionCapture",
+        sourcePR: "PR #10",
+        createdAt: "2026-08-05T10:00:00.000Z"
+      },
+      reviewedByLogin: status === "ACCEPTED" ? "Tausif4171" : null,
+      reviewedAt: status === "ACCEPTED" ? now : null,
+      reviewNote: null,
+      createdAt: now,
+      updatedAt: now
+    };
+  }
+
+  function overview() {
+    const currentRelationship = relationship(accepted ? "ACCEPTED" : "SUGGESTED");
+    return {
+      enabled: true,
+      canManage: true,
+      analysis: analyzed
+        ? {
+            status: "COMPLETED",
+            analysisVersion: "v3.1",
+            candidateCount: 4,
+            suggestionCount: accepted ? 0 : 1,
+            requestedByLogin: "Tausif4171",
+            lastAttemptAt: now,
+            lastSuccessAt: now,
+            error: null,
+            updatedAt: now
+          }
+        : null,
+      suggestions: analyzed && !accepted ? [currentRelationship] : [],
+      confirmed: accepted ? [currentRelationship] : []
+    };
+  }
+
+  await page.route(`${API_URL}/decisions/${seededDecision.id}/relationships`, async (route) => {
+    await route.fulfill({ json: overview() });
+  });
+  await page.route(`${API_URL}/decisions/${seededDecision.id}/relationships/analyze`, async (route) => {
+    analyzed = true;
+    await route.fulfill({
+      json: {
+        status: "completed",
+        analysis: overview().analysis
+      }
+    });
+  });
+  await page.route(
+    `${API_URL}/decisions/${seededDecision.id}/relationships/relationship-e2e-1/accept`,
+    async (route) => {
+      accepted = true;
+      await route.fulfill({ json: relationship("ACCEPTED") });
+    }
+  );
+
+  await page.goto(`/decisions/${seededDecision.id}`);
+
+  await expect(page.getByRole("heading", { name: "Decision relationships" })).toBeVisible();
+  await expect(page.getByText("Analyze this decision to look for supported relationships with earlier decisions.")).toBeVisible();
+  await page.getByRole("button", { name: "Analyze relationships" }).click();
+
+  await expect(page.getByText("Needs review", { exact: true })).toBeVisible();
+  await expect(page.getByText("Builds on", { exact: true })).toBeVisible();
+  await expect(page.getByText("86% confidence", { exact: true })).toBeVisible();
+  await expect(page.getByText("Both decisions use BullMQ-backed workers for retryable processing.")).toBeVisible();
+  await page.getByRole("button", { name: "Accept" }).click();
+
+  await expect(page.getByRole("heading", { name: "Confirmed", exact: true })).toBeVisible();
+  await expect(page.getByText("Confirmed by Tausif4171", { exact: true })).toBeVisible();
+  await expect(page.getByText("Needs review", { exact: true })).toHaveCount(0);
 
   await page.setViewportSize({ width: 390, height: 844 });
   await expect

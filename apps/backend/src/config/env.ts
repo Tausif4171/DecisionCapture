@@ -46,7 +46,10 @@ const envSchema = z
     USE_HEURISTIC_AI_FALLBACK: booleanFromString.default(true),
     AUTO_APPROVAL_ENABLED: booleanFromString.default(true),
     AUTO_APPROVE_CONFIDENCE: z.coerce.number().min(0).max(1).default(0.78),
-    DECISION_SCORE_THRESHOLD: z.coerce.number().min(0).max(100).default(35)
+    DECISION_SCORE_THRESHOLD: z.coerce.number().min(0).max(100).default(35),
+    RELATIONSHIP_ANALYSIS_ENABLED: booleanFromString,
+    RELATIONSHIP_ANALYSIS_MAX_CANDIDATES: z.coerce.number().int().min(1).max(25).default(12),
+    RELATIONSHIP_CONFIDENCE_THRESHOLD: z.coerce.number().min(0).max(1).default(0.65)
   })
   .superRefine((values, context) => {
     if (values.AUTH_MODE !== "github") {

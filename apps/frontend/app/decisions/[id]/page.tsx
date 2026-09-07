@@ -58,6 +58,7 @@ import { ReviewReasonDialog } from "../../components/review-reason-dialog";
 import { GitHubIssuePicker } from "../../components/github-issue-picker";
 import { SelectMenu } from "../../components/select-menu";
 import { StatusBadge } from "../../components/status-badge";
+import { DecisionRelationships } from "../../components/decision-relationships";
 
 const FILE_PREVIEW_LIMIT = 8;
 const AUDIT_PREVIEW_LIMIT = 6;
@@ -93,7 +94,11 @@ function formatAuditAction(action: string, actorLogin?: string | null) {
     APPROVED: `Approved by ${actor}`,
     REJECTED: `Rejected by ${actor}`,
     REOPENED: `Review reopened by ${actor}`,
-    CONTEXT_LINKED: `GitHub context linked by ${actor}`
+    CONTEXT_LINKED: `GitHub context linked by ${actor}`,
+    RELATIONSHIP_SUGGESTED: "Relationship suggested by DecisionCapture",
+    RELATIONSHIP_ACCEPTED: `Relationship accepted by ${actor}`,
+    RELATIONSHIP_DISMISSED: `Relationship dismissed by ${actor}`,
+    RELATIONSHIP_STALE: "Relationship marked stale by DecisionCapture"
   };
 
   return labels[action] ?? action.toLowerCase().replace("_", " ");
@@ -889,6 +894,8 @@ export default function DecisionDetailPage() {
           </div>
         </aside>
       </section>
+
+      <DecisionRelationships decisionId={decision.id} decisionStatus={decision.status} />
 
       <ReviewReasonDialog
         open={isRejectDialogOpen}
