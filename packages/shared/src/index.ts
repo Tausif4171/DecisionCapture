@@ -6,7 +6,11 @@ export type DecisionAuditAction =
   | "APPROVED"
   | "REJECTED"
   | "REOPENED"
-  | "CONTEXT_LINKED";
+  | "CONTEXT_LINKED"
+  | "RELATIONSHIP_SUGGESTED"
+  | "RELATIONSHIP_ACCEPTED"
+  | "RELATIONSHIP_DISMISSED"
+  | "RELATIONSHIP_STALE";
 export type DecisionExtractionMethod = "OLLAMA" | "STRUCTURED_FALLBACK" | "UNKNOWN";
 export type ContextProvider = "GITHUB" | "LINEAR" | "JIRA" | "GENERIC";
 export type ExternalContextType = "ISSUE" | "ADR" | "ARCHITECTURE_DOC" | "MEETING";
@@ -17,6 +21,13 @@ export type DecisionContextRelationshipType =
   | "ORIGINATED_FROM"
   | "DOCUMENTS"
   | "DISCUSSED_IN";
+export type DecisionRelationshipType =
+  | "RELATED"
+  | "BUILDS_ON"
+  | "SUPERSEDES"
+  | "POSSIBLE_CONFLICT";
+export type DecisionRelationshipStatus = "SUGGESTED" | "ACCEPTED" | "DISMISSED" | "STALE";
+export type DecisionRelationshipAnalysisStatus = "PENDING" | "RUNNING" | "COMPLETED" | "FAILED";
 export type DecisionReviewReason =
   | "MISSING_EXPLANATION"
   | "STRUCTURED_FALLBACK"
@@ -147,6 +158,61 @@ export interface DecisionContextLink {
   createdAt: string;
   updatedAt: string;
   context: ExternalContext;
+}
+
+export interface RelatedDecisionSummary {
+  id: string;
+  decision: string;
+  reason: string;
+  impact: string;
+  category: string;
+  repository: string;
+  sourcePR: string;
+  createdAt: string;
+}
+
+export interface DecisionRelationship {
+  id: string;
+  sourceDecisionId: string;
+  targetDecisionId: string;
+  type: DecisionRelationshipType;
+  status: DecisionRelationshipStatus;
+  confidence: number;
+  explanation: string;
+  evidence: string[];
+  analysisVersion: string;
+  direction: "OUTGOING" | "INCOMING";
+  relatedDecision: RelatedDecisionSummary;
+  reviewedByLogin?: string | null;
+  reviewedAt?: string | null;
+  reviewNote?: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface DecisionRelationshipAnalysis {
+  status: DecisionRelationshipAnalysisStatus;
+  analysisVersion: string;
+  candidateCount: number;
+  suggestionCount: number;
+  requestedByLogin?: string | null;
+  lastAttemptAt?: string | null;
+  lastSuccessAt?: string | null;
+  error?: string | null;
+  updatedAt: string;
+}
+
+export interface DecisionRelationshipOverview {
+  enabled: boolean;
+  canManage: boolean;
+  analysis: DecisionRelationshipAnalysis | null;
+  suggestions: DecisionRelationship[];
+  confirmed: DecisionRelationship[];
+}
+
+export interface DecisionRelationshipAnalysisResponse {
+  status: "queued" | "completed" | "already_running";
+  analysis: DecisionRelationshipAnalysis;
 }
 
 export interface ContextUrlResolution {

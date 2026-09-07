@@ -13,6 +13,10 @@ const mockAutoLinkService = vi.hoisted(() => ({
   autoLinkGitHubIssueReferences: vi.fn()
 }));
 
+const mockRelationshipQueue = vi.hoisted(() => ({
+  scheduleRelationshipAnalysis: vi.fn()
+}));
+
 const mockPrisma = vi.hoisted(() => ({
   pullRequestRecord: {
     findUnique: vi.fn()
@@ -26,6 +30,8 @@ vi.mock("../src/modules/decisions/service.js", () => ({
 vi.mock("../src/modules/github/service.js", () => mockGitHubService);
 
 vi.mock("../src/modules/contexts/auto-link.service.js", () => mockAutoLinkService);
+
+vi.mock("../src/modules/relationships/queue.js", () => mockRelationshipQueue);
 
 vi.mock("../src/modules/database/prisma.js", () => ({
   prisma: mockPrisma
@@ -81,6 +87,7 @@ describe("decision processing orchestration", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockAutoLinkService.autoLinkGitHubIssueReferences.mockResolvedValue({ linked: 0, skipped: 0 });
+    mockRelationshipQueue.scheduleRelationshipAnalysis.mockResolvedValue(undefined);
   });
 
   it("syncs GitHub review comments after a pending decision is processed", async () => {
@@ -104,12 +111,46 @@ describe("decision processing orchestration", () => {
       context,
       decision
     });
+    expect(mockRelationshipQueue.scheduleRelationshipAnalysis).not.toHaveBeenCalled();
     expect(result).toMatchObject({
       status: "processed",
       decision: {
         id: "decision-88"
       }
     });
+  });
+
+  it("schedules relationship analysis after an automatically approved decision is processed", async () => {
+    const context = buildContext();
+    const decision = buildDecision({ status: "APPROVED" });
+
+    mockDecisionService.analyzePrContext.mockResolvedValue({
+      status: "processed",
+      decision,
+      message: "Decision memory captured"
+    });
+
+    await processDecisionContext(context);
+
+    expect(mockRelationshipQueue.scheduleRelationshipAnalysis).toHaveBeenCalledWith("decision-88");
+  });
+
+  it("keeps decision capture successful when relationship scheduling fails", async () => {
+    const context = buildContext();
+    const decision = buildDecision({ status: "APPROVED" });
+
+    mockDecisionService.analyzePrContext.mockResolvedValue({
+      status: "processed",
+      decision,
+      message: "Decision memory captured"
+    });
+    mockRelationshipQueue.scheduleRelationshipAnalysis.mockRejectedValue(
+      new Error("Relationship queue unavailable")
+    );
+
+    const result = await processDecisionContext(context);
+
+    expect(result.status).toBe("processed");
   });
 
   it("skips GitHub review comment sync when the result is ignored", async () => {

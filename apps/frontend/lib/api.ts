@@ -6,6 +6,9 @@ import type {
   DecisionContextRelationshipType,
   DecisionListResponse,
   DecisionMemory,
+  DecisionRelationship,
+  DecisionRelationshipAnalysisResponse,
+  DecisionRelationshipOverview,
   DecisionStats,
   ExternalContextType,
   GitHubConnectionStatus,
@@ -112,6 +115,36 @@ export function listDecisionAudit(id: string) {
 
 export function listDecisionContexts(id: string) {
   return request<DecisionContextLink[]>(`/decisions/${id}/contexts`);
+}
+
+export function getDecisionRelationships(id: string) {
+  return request<DecisionRelationshipOverview>(`/decisions/${id}/relationships`);
+}
+
+export function analyzeDecisionRelationships(id: string) {
+  return request<DecisionRelationshipAnalysisResponse>(`/decisions/${id}/relationships/analyze`, {
+    method: "POST"
+  });
+}
+
+export function acceptDecisionRelationship(id: string, relationshipId: string, note?: string) {
+  return request<DecisionRelationship>(
+    `/decisions/${id}/relationships/${relationshipId}/accept`,
+    {
+      method: "PATCH",
+      body: JSON.stringify(note ? { note } : {})
+    }
+  );
+}
+
+export function dismissDecisionRelationship(id: string, relationshipId: string, note?: string) {
+  return request<DecisionRelationship>(
+    `/decisions/${id}/relationships/${relationshipId}/dismiss`,
+    {
+      method: "PATCH",
+      body: JSON.stringify(note ? { note } : {})
+    }
+  );
 }
 
 export function createDecisionContextLink(

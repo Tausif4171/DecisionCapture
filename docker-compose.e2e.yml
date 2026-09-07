@@ -31,6 +31,7 @@ services:
       USE_HEURISTIC_AI_FALLBACK: "true"
       AUTO_APPROVE_CONFIDENCE: "0.99"
       DECISION_SCORE_THRESHOLD: "35"
+      RELATIONSHIP_ANALYSIS_ENABLED: "false"
       INGEST_API_TOKEN: decisioncapture-e2e-token
     ports:
       - "4010:4000"

@@ -4,7 +4,13 @@ import type { AuthenticatedRequest } from "../auth/middleware.js";
 import { isAuthEnabled } from "../auth/service.js";
 import type { ReviewActor } from "../auth/types.js";
 import { analyzeOrQueue } from "../queue/service.js";
-import { processDecisionContext, syncDecisionNotificationFromStoredContext } from "./processor.js";
+import {
+  invalidateRelationshipsForReopenedDecision,
+  processDecisionContext,
+  scheduleRelationshipAnalysisForApprovedDependents,
+  scheduleRelationshipAnalysisForApprovedDecision,
+  syncDecisionNotificationFromStoredContext
+} from "./processor.js";
 import { decisionService } from "./service.js";
 import {
   decisionRejectSchema,
@@ -75,6 +81,8 @@ export async function approveDecision(request: Request, response: Response) {
   const updates = decisionReviewSchema.parse(request.body);
   const decision = await decisionService.approveDecision(decisionId(request), updates, reviewActor(request));
   await syncDecisionNotificationFromStoredContext(decision);
+  await scheduleRelationshipAnalysisForApprovedDecision(decision);
+  await scheduleRelationshipAnalysisForApprovedDependents(decision.id);
   return response.json(decision);
 }
 
@@ -88,6 +96,7 @@ export async function rejectDecision(request: Request, response: Response) {
 export async function reopenDecision(request: Request, response: Response) {
   const input = decisionReopenSchema.parse(request.body);
   const decision = await decisionService.reopenDecision(decisionId(request), input, reviewActor(request));
+  await invalidateRelationshipsForReopenedDecision(decision.id);
   await syncDecisionNotificationFromStoredContext(decision);
   return response.json(decision);
 }
