@@ -3,8 +3,7 @@ export type DecisionSectionKey = "summary" | "decision" | "reason" | "alternativ
 export type DecisionSections = Partial<Record<DecisionSectionKey, string>>;
 
 const INLINE_SECTION_PATTERN = /\b(summary|decision|reason|alternatives?|impact)\s*:/gi;
-const MARKDOWN_SECTION_PATTERN =
-  /^ {0,3}#{1,6}\s+[*_`]*(summary|decision|reason|alternatives?|impact)[*_`]*\s*:?\s*#*\s*$/gim;
+const MARKDOWN_HEADING_PATTERN = /^ {0,3}#{1,6}\s+.+?\s*$/gim;
 
 function sectionKey(label: string | undefined): DecisionSectionKey | undefined {
   if (!label) {
@@ -13,6 +12,16 @@ function sectionKey(label: string | undefined): DecisionSectionKey | undefined {
 
   const normalized = label.toLowerCase();
   return normalized.startsWith("alternative") ? "alternative" : (normalized as DecisionSectionKey);
+}
+
+function markdownSectionKey(heading: string) {
+  const label = heading
+    .replace(/^ {0,3}#{1,6}\s+/, "")
+    .replace(/[*_`]/g, "")
+    .replace(/\s*:?\s*#*\s*$/, "")
+    .trim();
+
+  return /^(summary|decision|reason|alternatives?|impact)$/i.test(label) ? sectionKey(label) : undefined;
 }
 
 function stripFencedCode(text: string) {
@@ -45,10 +54,10 @@ export function firstStructuredStatement(value: string | undefined) {
 
 export function parseStructuredSections(text: string): DecisionSections {
   const source = stripFencedCode(text);
-  const markdownMatches = [...source.matchAll(MARKDOWN_SECTION_PATTERN)].map((match) => ({
+  const markdownMatches = [...source.matchAll(MARKDOWN_HEADING_PATTERN)].map((match) => ({
     index: match.index ?? 0,
     length: match[0].length,
-    key: sectionKey(match[1])
+    key: markdownSectionKey(match[0])
   }));
   const inlineMatches = [...source.matchAll(INLINE_SECTION_PATTERN)]
     .filter((match) => {
