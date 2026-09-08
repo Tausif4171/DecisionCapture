@@ -143,6 +143,24 @@ describe("DecisionRelationshipService", () => {
     env.RELATIONSHIP_ANALYSIS_ENABLED = originalEnabled;
   });
 
+  it("keeps relationship data hidden while the feature flag is disabled", async () => {
+    env.RELATIONSHIP_ANALYSIS_ENABLED = false;
+    mockPrisma.decisionMemory.findUnique.mockResolvedValue({ id: "decision-new" });
+
+    const service = new DecisionRelationshipService({ analyze: vi.fn() });
+    const result = await service.overview("decision-new");
+
+    expect(result).toEqual({
+      enabled: false,
+      canManage: true,
+      analysis: null,
+      suggestions: [],
+      confirmed: []
+    });
+    expect(mockPrisma.decisionRelationshipAnalysis.findUnique).not.toHaveBeenCalled();
+    expect(mockPrisma.decisionRelationship.findMany).not.toHaveBeenCalled();
+  });
+
   it("stores an evidence-backed relationship as a suggestion", async () => {
     const provider = {
       analyze: vi.fn().mockResolvedValue([
