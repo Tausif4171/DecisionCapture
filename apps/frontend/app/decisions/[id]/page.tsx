@@ -269,6 +269,7 @@ export default function DecisionDetailPage() {
       setIsEditing(false);
       setDraft(null);
       await queryClient.invalidateQueries({ queryKey: ["decision", params.id] });
+      await queryClient.invalidateQueries({ queryKey: ["decision-relationships", params.id] });
       await queryClient.invalidateQueries({ queryKey: ["decision-audit", params.id] });
       await queryClient.invalidateQueries({ queryKey: ["decisions"] });
       await queryClient.invalidateQueries({ queryKey: ["stats"] });
@@ -281,6 +282,7 @@ export default function DecisionDetailPage() {
       setIsEditing(false);
       setDraft(null);
       await queryClient.invalidateQueries({ queryKey: ["decision", params.id] });
+      await queryClient.invalidateQueries({ queryKey: ["decision-relationships", params.id] });
       await queryClient.invalidateQueries({ queryKey: ["decision-audit", params.id] });
       await queryClient.invalidateQueries({ queryKey: ["decisions"] });
       await queryClient.invalidateQueries({ queryKey: ["stats"] });
@@ -293,6 +295,7 @@ export default function DecisionDetailPage() {
       setIsRejectDialogOpen(false);
       setRejectReason("");
       await queryClient.invalidateQueries({ queryKey: ["decision", params.id] });
+      await queryClient.invalidateQueries({ queryKey: ["decision-relationships", params.id] });
       await queryClient.invalidateQueries({ queryKey: ["decision-audit", params.id] });
       await queryClient.invalidateQueries({ queryKey: ["decisions"] });
       await queryClient.invalidateQueries({ queryKey: ["stats"] });
@@ -305,6 +308,7 @@ export default function DecisionDetailPage() {
       setIsReopenDialogOpen(false);
       setReopenReason("");
       await queryClient.invalidateQueries({ queryKey: ["decision", params.id] });
+      await queryClient.invalidateQueries({ queryKey: ["decision-relationships", params.id] });
       await queryClient.invalidateQueries({ queryKey: ["decision-audit", params.id] });
       await queryClient.invalidateQueries({ queryKey: ["decisions"] });
       await queryClient.invalidateQueries({ queryKey: ["stats"] });

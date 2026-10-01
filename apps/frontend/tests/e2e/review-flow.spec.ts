@@ -454,6 +454,7 @@ test("relationship suggestions require review before becoming confirmed memory",
   const now = new Date().toISOString();
   let analyzed = false;
   let accepted = false;
+  let reopened = false;
 
   function relationship(status: "SUGGESTED" | "ACCEPTED") {
     return {
@@ -489,6 +490,16 @@ test("relationship suggestions require review before becoming confirmed memory",
   }
 
   function overview() {
+    if (reopened) {
+      return {
+        enabled: true,
+        canManage: true,
+        analysis: null,
+        suggestions: [],
+        confirmed: []
+      };
+    }
+
     const currentRelationship = relationship(accepted ? "ACCEPTED" : "SUGGESTED");
     return {
       enabled: true,
@@ -523,6 +534,10 @@ test("relationship suggestions require review before becoming confirmed memory",
       }
     });
   });
+  await page.route(`${API_URL}/decisions/${seededDecision.id}/reopen`, async (route) => {
+    reopened = true;
+    await route.continue();
+  });
   await page.route(
     `${API_URL}/decisions/${seededDecision.id}/relationships/relationship-e2e-1/accept`,
     async (route) => {
@@ -546,6 +561,23 @@ test("relationship suggestions require review before becoming confirmed memory",
   await expect(page.getByRole("heading", { name: "Confirmed", exact: true })).toBeVisible();
   await expect(page.getByText("Confirmed by Tausif4171", { exact: true })).toBeVisible();
   await expect(page.getByText("Needs review", { exact: true })).toHaveCount(0);
+
+  await page.getByRole("button", { name: "Reopen review", exact: true }).click();
+  const reopenDialog = page.getByRole("dialog", { name: "Reopen review" });
+  await reopenDialog.getByLabel("Reason for reopening").fill("Recheck the relationship after new evidence.");
+  await reopenDialog.getByRole("button", { name: "Reopen review", exact: true }).click();
+
+  await expect(page.getByText("Pending", { exact: true })).toBeVisible();
+  await expect(
+    page.getByText("Relationships are analyzed after this decision is approved.", { exact: true })
+  ).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Confirmed", exact: true })).toHaveCount(0);
+  await expect(page.getByText("Needs review", { exact: true })).toHaveCount(0);
+
+  await page.getByRole("button", { name: "Approve", exact: true }).click();
+  await expect(page.getByText("Approved decisions are locked to preserve an auditable record.")).toBeVisible();
+  await expect(page.getByRole("button", { name: "Analyze relationships", exact: true })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Confirmed", exact: true })).toHaveCount(0);
 
   await page.setViewportSize({ width: 390, height: 844 });
   await expect

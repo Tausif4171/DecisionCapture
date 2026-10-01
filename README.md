@@ -289,6 +289,9 @@ GitHub installation access tokens are generated on the backend, cached only unti
 
 ## Decision Relationships
 
+For rollout, verification, permissions, failure recovery, and rollback steps, see
+[the V3 decision-relationships runbook](docs/v3-decision-relationships-runbook.md).
+
 V3 can compare a newly approved decision with a bounded set of earlier approved decisions from the same repository. It uses deterministic repository, file, category, text, and linked-context signals to select candidates before sending only those candidates to Ollama.
 
 The model may suggest `RELATED`, `BUILDS_ON`, `SUPERSEDES`, or `POSSIBLE_CONFLICT`. Suggestions include evidence and confidence, but they do not become engineering memory until an admin, maintainer, or reviewer accepts them. Dismissed suggestions are retained to prevent repeated noise. Reopening a connected decision makes active relationships stale and reapproval schedules reassessment.
