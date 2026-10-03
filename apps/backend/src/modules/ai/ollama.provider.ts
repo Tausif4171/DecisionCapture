@@ -27,7 +27,7 @@ export function normalizeOllamaConfidence(value: unknown) {
 const extractedDecisionSchema = z.object({
   decision: z.string().min(1),
   reason: z.string().min(1),
-  alternative: z.string().optional(),
+  alternative: z.preprocess((value) => (value == null ? undefined : value), z.string().optional()),
   impact: z.string().min(1),
   confidence: z.preprocess(normalizeOllamaConfidence, z.number().min(0).max(1)),
   category: z.string().min(1).default("architecture")
@@ -133,6 +133,10 @@ function extractJson(text: string) {
   }
 
   return JSON.parse(match[0]) as unknown;
+}
+
+export function parseOllamaDecision(text: string) {
+  return extractedDecisionSchema.parse(extractJson(text));
 }
 
 function truncate(value: string | undefined, maxLength: number) {
@@ -260,7 +264,7 @@ export class OllamaAIProvider implements AIProvider {
       }
 
       const payload = (await response.json()) as { response?: string };
-      const parsed = extractedDecisionSchema.parse(extractJson(payload.response ?? ""));
+      const parsed = parseOllamaDecision(payload.response ?? "");
 
       return {
         ...parsed,

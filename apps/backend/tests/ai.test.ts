@@ -4,7 +4,8 @@ import { HeuristicAIProvider } from "../src/modules/ai/heuristic.provider.js";
 import {
   buildOllamaPrompt,
   isOllamaModelAvailable,
-  normalizeOllamaConfidence
+  normalizeOllamaConfidence,
+  parseOllamaDecision
 } from "../src/modules/ai/ollama.provider.js";
 
 const score: DecisionScore = {
@@ -153,6 +154,24 @@ describe("normalizeOllamaConfidence", () => {
   it("leaves invalid values for schema validation to reject", () => {
     expect(normalizeOllamaConfidence(125)).toBe(125);
     expect(normalizeOllamaConfidence("unknown")).toBe("unknown");
+  });
+});
+
+describe("parseOllamaDecision", () => {
+  it("treats a null optional alternative as omitted", () => {
+    const parsed = parseOllamaDecision(
+      JSON.stringify({
+        decision: "Use the explicit PR context",
+        reason: "The PR documents the rationale directly.",
+        alternative: null,
+        impact: "Reviewers receive clearer engineering memory.",
+        confidence: 0.82,
+        category: "architecture"
+      })
+    );
+
+    expect(parsed.alternative).toBeUndefined();
+    expect(parsed.confidence).toBe(0.82);
   });
 });
 
