@@ -7,6 +7,7 @@ import { Check, GitBranch, Loader2, LockKeyhole, Save, UserRound, X } from "luci
 import { approveDecision, listDecisions, rejectDecision, updateDecision } from "../../lib/api";
 import { formatExtractionConfidence } from "../../lib/decision-provenance";
 import {
+  hasDecisionDraftFields,
   hasDecisionReviewChanges,
   hasRequiredDecisionReviewFields,
   toDecisionReviewDraft
@@ -29,6 +30,7 @@ function PendingDecisionEditor({ decision }: { decision: DecisionMemory }) {
   const [rejectReason, setRejectReason] = useState("");
   const canReview = Boolean(decision.reviewPermissions?.canReview);
   const isDirty = hasDecisionReviewChanges(decision, draft);
+  const hasDraftFields = hasDecisionDraftFields(draft);
   const hasRequiredFields = hasRequiredDecisionReviewFields(draft);
 
   const saveMutation = useMutation({
@@ -111,7 +113,7 @@ function PendingDecisionEditor({ decision }: { decision: DecisionMemory }) {
             <button
               type="button"
               onClick={() => saveMutation.mutate()}
-              disabled={!isDirty || !hasRequiredFields || isBusy}
+              disabled={!isDirty || !hasDraftFields || isBusy}
               className="order-2 inline-flex min-h-9 items-center justify-center gap-2 whitespace-nowrap rounded-md border border-neutral-200 px-3 py-2 text-sm font-medium text-neutral-700 transition hover:bg-neutral-50 disabled:text-neutral-400 sm:order-1"
               title="Save draft without approving"
             >
@@ -170,18 +172,20 @@ function PendingDecisionEditor({ decision }: { decision: DecisionMemory }) {
         <>
           <div className="grid gap-3">
             <label>
-              <span className="text-xs font-semibold uppercase tracking-normal text-neutral-500">Decision</span>
+                <span className="text-xs font-semibold uppercase tracking-normal text-neutral-500">Decision <span className="text-amber-700">Required</span></span>
               <textarea
                 aria-label="Decision"
+                aria-required="true"
                 value={draft.decision}
                 onChange={(event) => updateDraftField("decision", event.target.value)}
                 className="mt-1 min-h-20 w-full rounded-md border border-neutral-200 p-3 text-sm outline-none focus:border-neutral-400"
               />
             </label>
             <label>
-              <span className="text-xs font-semibold uppercase tracking-normal text-neutral-500">Reason</span>
+                <span className="text-xs font-semibold uppercase tracking-normal text-neutral-500">Reason <span className="text-amber-700">Required</span></span>
               <textarea
                 aria-label="Reason"
+                aria-required="true"
                 value={draft.reason}
                 onChange={(event) => updateDraftField("reason", event.target.value)}
                 className="mt-1 min-h-24 w-full rounded-md border border-neutral-200 p-3 text-sm outline-none focus:border-neutral-400"
@@ -189,7 +193,7 @@ function PendingDecisionEditor({ decision }: { decision: DecisionMemory }) {
             </label>
             <div className="grid gap-3 lg:grid-cols-2">
               <label>
-                <span className="text-xs font-semibold uppercase tracking-normal text-neutral-500">Alternative</span>
+                <span className="text-xs font-semibold uppercase tracking-normal text-neutral-500">Alternative <span className="font-normal normal-case tracking-normal text-neutral-400">Optional</span></span>
                 <textarea
                   aria-label="Alternative"
                   value={draft.alternative}
@@ -198,10 +202,12 @@ function PendingDecisionEditor({ decision }: { decision: DecisionMemory }) {
                 />
               </label>
               <label>
-                <span className="text-xs font-semibold uppercase tracking-normal text-neutral-500">Impact</span>
+                <span className="text-xs font-semibold uppercase tracking-normal text-neutral-500">Impact <span className="text-amber-700">Required to approve</span></span>
                 <textarea
                   aria-label="Impact"
+                  aria-required="true"
                   value={draft.impact}
+                  placeholder={'Describe the effect, or write \'No runtime impact.\''}
                   onChange={(event) => updateDraftField("impact", event.target.value)}
                   className="mt-1 min-h-20 w-full rounded-md border border-neutral-200 p-3 text-sm outline-none focus:border-neutral-400"
                 />
@@ -230,7 +236,7 @@ function PendingDecisionEditor({ decision }: { decision: DecisionMemory }) {
           </div>
           <div>
             <dt className="text-xs font-semibold uppercase tracking-normal text-neutral-500">Impact</dt>
-            <dd className="mt-1 text-sm leading-6 text-neutral-700">{decision.impact}</dd>
+            <dd className="mt-1 text-sm leading-6 text-neutral-700">{decision.impact || "Not recorded"}</dd>
           </div>
         </dl>
       )}

@@ -199,7 +199,7 @@ model DecisionMemory {
   decision    String
   reason      String
   alternative String?
-  impact      String
+  impact      String?
   author      String
   sourcePR    String
   repository  String

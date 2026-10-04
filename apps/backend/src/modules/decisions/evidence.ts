@@ -4,9 +4,6 @@ import { parseStructuredSections } from "./structured-sections.js";
 export const MISSING_REASON =
   "The PR context did not state an explicit reason. Reviewer confirmation is required.";
 
-export const MISSING_IMPACT =
-  "The PR context did not state an explicit impact. Reviewer confirmation is required.";
-
 export type ExplanationEvidenceSource = "DESCRIPTION" | "DISCUSSION" | "MISSING";
 
 export type ExplanationEvidence = {

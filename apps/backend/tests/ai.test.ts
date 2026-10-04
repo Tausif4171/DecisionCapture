@@ -101,7 +101,7 @@ Approved decisions can be compared with earlier decisions.
     expect(extracted.decision).toBe("Add the scoped relationship workflow.");
   });
 
-  it("uses the PR title and honest review placeholders when context is incomplete", async () => {
+  it("keeps missing optional impact honest when context is incomplete", async () => {
     const extracted = await new HeuristicAIProvider().extractDecision(
       context({
         title: "Limit dashboard exports to organization members",
@@ -113,7 +113,7 @@ Approved decisions can be compared with earlier decisions.
 
     expect(extracted.decision).toBe("Limit dashboard exports to organization members");
     expect(extracted.reason).toContain("did not state an explicit reason");
-    expect(extracted.impact).toContain("did not state an explicit impact");
+    expect(extracted.impact).toBeUndefined();
     expect(extracted.decision).not.toContain("Redis");
     expect(extracted.decision).not.toContain("PostgreSQL");
   });
@@ -158,19 +158,20 @@ describe("normalizeOllamaConfidence", () => {
 });
 
 describe("parseOllamaDecision", () => {
-  it("treats a null optional alternative as omitted", () => {
+  it("treats null optional fields as omitted", () => {
     const parsed = parseOllamaDecision(
       JSON.stringify({
         decision: "Use the explicit PR context",
         reason: "The PR documents the rationale directly.",
         alternative: null,
-        impact: "Reviewers receive clearer engineering memory.",
+        impact: null,
         confidence: 0.82,
         category: "architecture"
       })
     );
 
     expect(parsed.alternative).toBeUndefined();
+    expect(parsed.impact).toBeUndefined();
     expect(parsed.confidence).toBe(0.82);
   });
 });
