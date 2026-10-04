@@ -63,10 +63,11 @@ describe("GitHub webhook API", () => {
       }
     };
     const rawBody = JSON.stringify(body);
+    env.GITHUB_WEBHOOK_SECRET = "change-me";
     const response = createMockResponse();
     const request = createMockRequest(body, {
       "x-github-event": "pull_request",
-      "x-hub-signature-256": createGitHubSignature(rawBody, "change-me")
+      "x-hub-signature-256": createGitHubSignature(rawBody, env.GITHUB_WEBHOOK_SECRET ?? "change-me")
     });
 
     await githubWebhook(request, response);

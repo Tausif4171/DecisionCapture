@@ -7,7 +7,8 @@ const envMock = vi.hoisted(() => ({
   GITHUB_API_TOKEN: "github-token",
   GITHUB_APP_ID: undefined,
   GITHUB_APP_INSTALLATION_ID: undefined,
-  GITHUB_APP_PRIVATE_KEY: undefined
+  GITHUB_APP_PRIVATE_KEY: undefined,
+  CONFLICT_DETECTION_ENABLED: true
 }));
 
 const loggerMock = vi.hoisted(() => ({
@@ -24,7 +25,11 @@ vi.mock("../src/config/logger.js", () => ({
   logger: loggerMock
 }));
 
-import { enrichWebhookToPRContext, syncDecisionReviewComment } from "../src/modules/github/service.js";
+import {
+  enrichWebhookToPRContext,
+  shouldProcessConflictWebhook,
+  syncDecisionReviewComment
+} from "../src/modules/github/service.js";
 
 function jsonResponse(body: unknown) {
   return {
@@ -70,6 +75,40 @@ describe("GitHub service", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     global.fetch = vi.fn();
+  });
+
+  it("accepts eligible pre-review events and skips draft PRs until ready", () => {
+    const basePayload = {
+      action: "opened",
+      repository: { full_name: "acme/platform" },
+      pull_request: {
+        number: 91,
+        title: "Bring back JWT",
+        body: "",
+        merged: false,
+        merged_at: null,
+        html_url: "https://github.com/acme/platform/pull/91",
+        draft: false,
+        user: { login: "maya.dev" },
+        labels: []
+      }
+    } as const;
+
+    expect(shouldProcessConflictWebhook(basePayload)).toBe(true);
+    expect(
+      shouldProcessConflictWebhook({
+        ...basePayload,
+        action: "edited",
+        pull_request: { ...basePayload.pull_request, draft: true }
+      })
+    ).toBe(false);
+    expect(
+      shouldProcessConflictWebhook({
+        ...basePayload,
+        action: "ready_for_review",
+        pull_request: { ...basePayload.pull_request, draft: true }
+      })
+    ).toBe(true);
   });
 
   it("enriches webhook payloads with full GitHub API context", async () => {

@@ -25,6 +25,10 @@ export type GitHubPullRequestDetails = {
   body?: string | null;
   merged_at?: string | null;
   html_url: string;
+  state?: "open" | "closed";
+  draft?: boolean;
+  base?: { ref?: string };
+  head?: { sha?: string };
   user: GitHubUser;
   labels?: GitHubLabel[];
   requested_reviewers?: GitHubUser[];

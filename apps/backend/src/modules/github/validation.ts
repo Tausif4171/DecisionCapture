@@ -12,7 +12,10 @@ export const githubPullRequestWebhookSchema = z.object({
     merged: z.boolean(),
     merged_at: z.string().nullable().optional(),
     html_url: z.string().url(),
+    state: z.enum(["open", "closed"]).optional().default("open"),
     draft: z.boolean().optional().default(false),
+    base: z.object({ ref: z.string() }).optional(),
+    head: z.object({ sha: z.string() }).optional(),
     user: z.object({
       login: z.string()
     }),

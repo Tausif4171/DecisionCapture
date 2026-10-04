@@ -28,6 +28,17 @@ export type DecisionRelationshipType =
   | "POSSIBLE_CONFLICT";
 export type DecisionRelationshipStatus = "SUGGESTED" | "ACCEPTED" | "DISMISSED" | "STALE";
 export type DecisionRelationshipAnalysisStatus = "PENDING" | "RUNNING" | "COMPLETED" | "FAILED";
+export type PullRequestState = "OPEN" | "CLOSED";
+export type ConflictScanStatus = "PENDING" | "RUNNING" | "COMPLETED" | "FAILED" | "SKIPPED";
+export type DecisionConflictStatus = "OPEN" | "DISMISSED" | "RESOLVED" | "STALE";
+export type ConflictMatchMethod = "LEXICAL" | "EMBEDDING" | "HYBRID";
+export type ConflictAuditAction =
+  | "DETECTED"
+  | "DISMISSED"
+  | "RESOLVED"
+  | "STALE"
+  | "COMMENT_SYNCED"
+  | "CHECK_UPDATED";
 export type DecisionReviewReason =
   | "MISSING_EXPLANATION"
   | "STRUCTURED_FALLBACK"
@@ -51,6 +62,11 @@ export interface PRContext {
   approvals?: string[];
   labels?: string[];
   diffSummary?: string;
+  action?: string;
+  state?: PullRequestState;
+  draft?: boolean;
+  baseBranch?: string;
+  headSha?: string;
 }
 
 export interface DecisionScore {
@@ -213,6 +229,68 @@ export interface DecisionRelationshipOverview {
 export interface DecisionRelationshipAnalysisResponse {
   status: "queued" | "completed" | "already_running";
   analysis: DecisionRelationshipAnalysis;
+}
+
+export interface DecisionConflict {
+  id: string;
+  scanId: string;
+  pullRequestRecordId: string;
+  decisionId: string;
+  repository: string;
+  prNumber: number;
+  prUrl: string;
+  prTitle: string;
+  pullRequestState: PullRequestState;
+  headSha: string;
+  similarityScore: number;
+  confidence: number;
+  explanation: string;
+  evidence: string[];
+  matchMethod: ConflictMatchMethod;
+  status: DecisionConflictStatus;
+  historicalDecision: {
+    id: string;
+    decision: string;
+    reason: string;
+    status: DecisionStatus;
+    category: string;
+    sourcePR: string;
+    repository: string;
+    createdAt: string;
+  };
+  reviewedByLogin?: string | null;
+  reviewedAt?: string | null;
+  reviewNote?: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface ConflictScan {
+  id: string;
+  repository: string;
+  prNumber: number;
+  headSha: string;
+  contentHash: string;
+  status: ConflictScanStatus;
+  candidateCount: number;
+  conflictCount: number;
+  error?: string | null;
+  lastAttemptAt?: string | null;
+  lastSuccessAt?: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface ConflictOverview {
+  enabled: boolean;
+  canManage: boolean;
+  conflicts: DecisionConflict[];
+  scans: ConflictScan[];
+}
+
+export interface ConflictScanResponse {
+  status: "queued" | "completed" | "already_running";
+  scan: ConflictScan;
 }
 
 export interface ContextUrlResolution {

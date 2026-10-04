@@ -59,6 +59,7 @@ import { GitHubIssuePicker } from "../../components/github-issue-picker";
 import { SelectMenu } from "../../components/select-menu";
 import { StatusBadge } from "../../components/status-badge";
 import { DecisionRelationships } from "../../components/decision-relationships";
+import { PotentialConflicts } from "../../components/potential-conflicts";
 
 const FILE_PREVIEW_LIMIT = 8;
 const AUDIT_PREVIEW_LIMIT = 6;
@@ -900,6 +901,7 @@ export default function DecisionDetailPage() {
       </section>
 
       <DecisionRelationships decisionId={decision.id} decisionStatus={decision.status} />
+      <PotentialConflicts decisionId={decision.id} decisionStatus={decision.status} />
 
       <ReviewReasonDialog
         open={isRejectDialogOpen}

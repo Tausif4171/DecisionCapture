@@ -207,6 +207,22 @@ export function shouldProcessPullRequestWebhook(payload: GitHubPullRequestWebhoo
   return payload.action === "closed" && payload.pull_request.merged === true && payload.pull_request.draft !== true;
 }
 
+export function shouldProcessConflictWebhook(payload: GitHubPullRequestWebhook) {
+  if (!env.CONFLICT_DETECTION_ENABLED) {
+    return false;
+  }
+
+  if (payload.action === "closed") {
+    return true;
+  }
+
+  if (!["opened", "edited", "reopened", "synchronize", "ready_for_review"].includes(payload.action)) {
+    return false;
+  }
+
+  return payload.action === "ready_for_review" || payload.pull_request.draft !== true;
+}
+
 export function mapWebhookToPRContext(payload: GitHubPullRequestWebhook): PRContext {
   return {
     prNumber: payload.pull_request.number,
@@ -223,7 +239,12 @@ export function mapWebhookToPRContext(payload: GitHubPullRequestWebhook): PRCont
     approvals: [],
     labels: payload.pull_request.labels.map((label) => label.name),
     diffSummary:
-      "GitHub webhook payload received. Configure the included GitHub Action for full files, commits, reviews, and diff context."
+      "GitHub webhook payload received. Configure the included GitHub Action for full files, commits, reviews, and diff context.",
+    action: payload.action,
+    state: payload.pull_request.state === "closed" ? "CLOSED" : "OPEN",
+    draft: payload.pull_request.draft,
+    baseBranch: payload.pull_request.base?.ref,
+    headSha: payload.pull_request.head?.sha
   };
 }
 
@@ -278,7 +299,12 @@ export async function enrichWebhookToPRContext(payload: GitHubPullRequestWebhook
       reviews.filter((review) => review.state === "APPROVED").map((review) => review.user?.login)
     ),
     labels: dedupe(pullRequest.labels?.map((label) => label.name) ?? context.labels ?? []),
-    diffSummary: summarizeDiff(diff) || summarizeFilePatches(files)
+    diffSummary: summarizeDiff(diff) || summarizeFilePatches(files),
+    action: payload.action,
+    state: pullRequest.state ? (pullRequest.state === "closed" ? "CLOSED" : "OPEN") : context.state,
+    draft: pullRequest.draft ?? context.draft,
+    baseBranch: pullRequest.base?.ref ?? context.baseBranch,
+    headSha: pullRequest.head?.sha ?? context.headSha
   };
 }
 

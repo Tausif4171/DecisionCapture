@@ -7,6 +7,8 @@ import { decisionsRouter } from "./modules/decisions/routes.js";
 import { demoRouter } from "./modules/demo/routes.js";
 import { githubRouter } from "./modules/github/routes.js";
 import { checkOllamaHealth } from "./modules/ai/ollama.provider.js";
+import { conflictScansRouter, conflictsRouter } from "./modules/conflicts/routes.js";
+import { checkConflictHealth } from "./modules/conflicts/health.js";
 
 export const router = Router();
 
@@ -32,8 +34,17 @@ router.get(
   })
 );
 
+router.get(
+  "/health/conflicts",
+  asyncHandler(async (_request, response) => {
+    response.json(await checkConflictHealth());
+  })
+);
+
 router.use("/auth", authRouter);
 router.use("/contexts", contextsRouter);
 router.use("/github", githubRouter);
 router.use("/decisions", decisionsRouter);
 router.use("/demo", demoRouter);
+router.use("/conflicts", conflictsRouter);
+router.use("/conflict-scans", conflictScansRouter);
