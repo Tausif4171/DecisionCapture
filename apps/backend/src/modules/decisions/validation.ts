@@ -39,7 +39,7 @@ export const decisionReviewSchema = z.object({
   decision: z.string().min(1).optional(),
   reason: z.string().min(1).optional(),
   alternative: z.string().optional().nullable(),
-  impact: z.string().min(1).optional()
+  impact: z.string().optional().nullable()
 });
 
 export const decisionReopenSchema = z.object({

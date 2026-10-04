@@ -30,6 +30,12 @@ Engineering decisions are often buried in merged PRs, review comments, and commi
 - **Conservative fallback:** when Ollama is unavailable or returns unusable output, DecisionCapture creates a pending draft from explicit PR sections only.
 - **Auditable review:** edits, approvals, rejections, and reopened reviews are stored with reviewer identity.
 
+### Decision context quality
+
+For a decision that becomes approved memory, `Decision`, `Reason`, and `Impact` are required. `Alternative` is optional because some changes have no meaningful alternative. A PR does not need all four sections when it is a small documentation, test, or maintenance change, but a captured decision with missing Impact stays pending until a reviewer adds a truthful statement such as `No runtime impact`.
+
+DecisionCapture never invents missing rationale. Empty optional fields are stored as not recorded, and missing required context is shown as a focused review action rather than a generic extraction failure.
+
 ## Architecture
 
 ```mermaid

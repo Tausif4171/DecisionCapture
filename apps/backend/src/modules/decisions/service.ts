@@ -43,6 +43,7 @@ function reviewReasonForDecision(decision: {
   status: DecisionStatus;
   extractionMethod: DecisionExtractionMethod;
   reason: string;
+  impact?: string | null;
   lastEditedByLogin?: string | null;
   auditLogs?: Array<{
     action: DecisionAuditAction;
@@ -65,6 +66,10 @@ function reviewReasonForDecision(decision: {
 
   if (decision.extractionMethod === "STRUCTURED_FALLBACK") {
     return "STRUCTURED_FALLBACK";
+  }
+
+  if (!decision.impact?.trim()) {
+    return "INCOMPLETE_CONTEXT";
   }
 
   if (decision.lastEditedByLogin) {
@@ -141,6 +146,33 @@ function actorLogin(actor: ReviewActor) {
 
 function auditActorLogin(actor: ReviewActor) {
   return actor.user?.login ?? (actor.authRequired ? null : "system");
+}
+
+function normalizeOptionalText(value: string | null | undefined) {
+  const normalized = value?.trim();
+  return normalized ? normalized : null;
+}
+
+function normalizeReviewUpdates(updates: DecisionReviewUpdates): DecisionReviewUpdates {
+  const normalized = { ...updates };
+
+  if (updates.decision !== undefined) {
+    normalized.decision = updates.decision.trim();
+  }
+
+  if (updates.reason !== undefined) {
+    normalized.reason = updates.reason.trim();
+  }
+
+  if (updates.alternative !== undefined) {
+    normalized.alternative = normalizeOptionalText(updates.alternative);
+  }
+
+  if ("impact" in updates) {
+    normalized.impact = normalizeOptionalText(updates.impact);
+  }
+
+  return normalized;
 }
 
 function decisionSnapshot(decision: DecisionMemoryRecord): Prisma.InputJsonObject {
@@ -220,11 +252,13 @@ export class DecisionService {
     };
     const evidence = assessExplanationEvidence(context);
     const missingExplicitReason = !evidence.hasExplicitReason;
+    const missingImpact = !extractedDecision.impact?.trim();
     const confidence = missingExplicitReason
       ? Math.min(extractedDecision.confidence, 0.49)
       : extractedDecision.confidence;
     const status = (
       missingExplicitReason ||
+      missingImpact ||
       extractedDecision.extractionMethod === "STRUCTURED_FALLBACK" ||
       !env.AUTO_APPROVAL_ENABLED
         ? "PENDING"
@@ -240,7 +274,7 @@ export class DecisionService {
       decision: extractedDecision.decision,
       reason: missingExplicitReason ? MISSING_REASON : extractedDecision.reason,
       alternative: extractedDecision.alternative,
-      impact: extractedDecision.impact,
+      impact: extractedDecision.impact ?? null,
       author: extractedDecision.author,
       sourcePR: extractedDecision.source,
       repository: context.repository,
@@ -540,13 +574,14 @@ export class DecisionService {
   ): Promise<DecisionMemory> {
     const existingDecision = await this.requirePendingDecision(id, "edit", actor);
     const login = actorLogin(actor);
+    const normalizedUpdates = normalizeReviewUpdates(updates);
 
     try {
       const decision = await prisma.$transaction(async (tx) => {
         const updatedDecision = await tx.decisionMemory.update({
           where: { id },
           data: {
-            ...updates,
+            ...normalizedUpdates,
             lastEditedByUserId: actor.user?.id ?? null,
             lastEditedByLogin: login
           }
@@ -583,6 +618,14 @@ export class DecisionService {
   ): Promise<DecisionMemory> {
     const existingDecision = await this.requirePendingDecision(id, "approve", actor);
     const login = actorLogin(actor);
+    const normalizedUpdates = normalizeReviewUpdates(updates);
+    const decisionValue = "decision" in normalizedUpdates ? normalizedUpdates.decision : existingDecision.decision;
+    const reasonValue = "reason" in normalizedUpdates ? normalizedUpdates.reason : existingDecision.reason;
+    const impactValue = "impact" in normalizedUpdates ? normalizedUpdates.impact : existingDecision.impact;
+
+    if (!decisionValue?.trim() || !reasonValue?.trim() || !impactValue?.trim()) {
+      throw new HttpError(400, "Decision, reason, and impact are required before approval");
+    }
 
     try {
       const decision = await prisma.$transaction(async (tx) => {
@@ -590,7 +633,7 @@ export class DecisionService {
         const updatedDecision = await tx.decisionMemory.update({
           where: { id },
           data: {
-            ...updates,
+            ...normalizedUpdates,
             status: "APPROVED",
             approvedByUserId: actor.user?.id ?? null,
             approvedByLogin: login,

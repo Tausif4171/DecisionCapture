@@ -33,7 +33,7 @@ type CandidateRecord = {
   decision: string;
   reason: string;
   alternative: string | null;
-  impact: string;
+  impact: string | null;
   category: string;
   repository: string;
   sourcePR: string;

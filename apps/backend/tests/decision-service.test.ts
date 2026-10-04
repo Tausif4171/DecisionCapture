@@ -320,6 +320,53 @@ Use the explicit decision from the PR body, but do not infer the missing rationa
     );
   });
 
+  it("keeps a decision pending when Impact is missing", async () => {
+    const aiProvider = {
+      extractDecision: vi.fn().mockResolvedValue(
+        buildExtractedDecision({
+          impact: null,
+          confidence: 0.98
+        })
+      )
+    };
+    const service = new DecisionService(aiProvider);
+
+    mockPrisma.pullRequestRecord.upsert.mockResolvedValue({ id: "pr-record-no-impact" });
+    mockPrisma.decisionMemory.findFirst.mockResolvedValue(null);
+    mockPrisma.decisionMemory.create.mockResolvedValue(
+      buildDecisionRecord({
+        id: "decision-no-impact",
+        prRecordId: "pr-record-no-impact",
+        impact: null,
+        status: "PENDING"
+      })
+    );
+
+    const result = await service.analyzePrContext(
+      buildContext({
+        description: `Decision:
+Use the queue worker for asynchronous processing.
+
+Reason:
+Webhook processing should remain fast while retries happen outside the request path.`
+      })
+    );
+
+    expect(mockPrisma.decisionMemory.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          impact: null,
+          status: "PENDING"
+        })
+      })
+    );
+    expect(result.decision).toMatchObject({
+      status: "PENDING",
+      impact: null,
+      reviewReason: "INCOMPLETE_CONTEXT"
+    });
+  });
+
   it("updates the existing decision for the same PR instead of creating a duplicate", async () => {
     const aiProvider = {
       extractDecision: vi.fn().mockResolvedValue(
@@ -532,6 +579,29 @@ Use the explicit decision from the PR body, but do not infer the missing rationa
       })
     );
     expect(result.status).toBe("APPROVED");
+  });
+
+  it("rejects approval when Impact is still missing", async () => {
+    const service = new DecisionService({
+      extractDecision: vi.fn()
+    });
+
+    mockPrisma.decisionMemory.findUnique.mockResolvedValue(
+      buildReviewableDecisionRecord({ id: "decision-missing-impact", impact: null })
+    );
+
+    await expect(
+      service.approveDecision("decision-missing-impact", {
+        decision: "Use BullMQ for PR analysis",
+        reason: "We need retries outside the request path.",
+        alternative: null,
+        impact: null
+      })
+    ).rejects.toMatchObject({
+      statusCode: 400,
+      message: "Decision, reason, and impact are required before approval"
+    });
+    expect(mockPrisma.decisionMemory.update).not.toHaveBeenCalled();
   });
 
   it("updates a pending decision without changing its review status", async () => {

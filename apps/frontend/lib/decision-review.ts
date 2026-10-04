@@ -14,7 +14,7 @@ export function toDecisionReviewDraft(decision: ReviewFields): DecisionReviewDra
     decision: decision.decision,
     reason: decision.reason,
     alternative: decision.alternative ?? "",
-    impact: decision.impact
+    impact: decision.impact ?? ""
   };
 }
 
@@ -23,10 +23,14 @@ export function hasDecisionReviewChanges(decision: ReviewFields, draft: Decision
     decision.decision !== draft.decision ||
     decision.reason !== draft.reason ||
     (decision.alternative ?? "") !== draft.alternative ||
-    decision.impact !== draft.impact
+    (decision.impact ?? "") !== draft.impact
   );
 }
 
+export function hasDecisionDraftFields(draft: DecisionReviewDraft) {
+  return draft.decision.trim().length > 0 && draft.reason.trim().length > 0;
+}
+
 export function hasRequiredDecisionReviewFields(draft: DecisionReviewDraft) {
-  return draft.decision.trim().length > 0 && draft.reason.trim().length > 0 && draft.impact.trim().length > 0;
+  return hasDecisionDraftFields(draft) && draft.impact.trim().length > 0;
 }

@@ -28,7 +28,7 @@ const extractedDecisionSchema = z.object({
   decision: z.string().min(1),
   reason: z.string().min(1),
   alternative: z.preprocess((value) => (value == null ? undefined : value), z.string().optional()),
-  impact: z.string().min(1),
+  impact: z.preprocess((value) => (value == null ? undefined : value), z.string().trim().min(1).optional()),
   confidence: z.preprocess(normalizeOllamaConfidence, z.number().min(0).max(1)),
   category: z.string().min(1).default("architecture")
 });
@@ -203,7 +203,7 @@ JSON shape:
   "decision": "short decision statement",
   "reason": "why this decision was made",
   "alternative": "main alternative considered",
-  "impact": "engineering impact",
+  "impact": "engineering impact, or null when the PR does not state one",
   "confidence": 0.0,
   "category": "database|api|architecture|dependencies|security|performance|infrastructure|collaboration"
 }

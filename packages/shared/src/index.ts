@@ -30,6 +30,7 @@ export type DecisionRelationshipStatus = "SUGGESTED" | "ACCEPTED" | "DISMISSED" 
 export type DecisionRelationshipAnalysisStatus = "PENDING" | "RUNNING" | "COMPLETED" | "FAILED";
 export type DecisionReviewReason =
   | "MISSING_EXPLANATION"
+  | "INCOMPLETE_CONTEXT"
   | "STRUCTURED_FALLBACK"
   | "LOW_CONFIDENCE"
   | "AWAITING_REVIEW"
@@ -65,7 +66,7 @@ export interface ExtractedDecision {
   decision: string;
   reason: string;
   alternative?: string;
-  impact: string;
+  impact?: string | null;
   author: string;
   source: string;
   confidence: number;
@@ -78,7 +79,7 @@ export interface DecisionMemory {
   decision: string;
   reason: string;
   alternative?: string | null;
-  impact: string;
+  impact?: string | null;
   author: string;
   sourcePR: string;
   repository: string;
@@ -164,7 +165,7 @@ export interface RelatedDecisionSummary {
   id: string;
   decision: string;
   reason: string;
-  impact: string;
+  impact?: string | null;
   category: string;
   repository: string;
   sourcePR: string;
