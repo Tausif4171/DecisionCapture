@@ -1,5 +1,5 @@
 import type { DecisionScore, ExtractedDecision, PRContext } from "@decisioncapture/shared";
-import { MISSING_IMPACT, MISSING_REASON } from "../decisions/evidence.js";
+import { MISSING_REASON } from "../decisions/evidence.js";
 import {
   cleanStructuredSection,
   firstStructuredStatement,
@@ -43,7 +43,7 @@ export class HeuristicAIProvider implements AIProvider {
         cleanStructuredSection(context.title),
       reason: sections.reason ?? MISSING_REASON,
       alternative: sections.alternative,
-      impact: sections.impact ?? MISSING_IMPACT,
+      impact: sections.impact,
       author: context.author,
       source: `PR #${context.prNumber}`,
       confidence: fallbackConfidence(sections, context),

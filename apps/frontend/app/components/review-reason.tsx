@@ -7,6 +7,11 @@ const reasonConfig = {
     label: "Missing explanation",
     description: "The PR was meaningful, but the source context did not clearly explain why this approach was chosen."
   },
+  INCOMPLETE_CONTEXT: {
+    icon: FileQuestion,
+    label: "Impact needed",
+    description: "Add a short impact statement before approving this decision. Use 'No runtime impact' when applicable."
+  },
   STRUCTURED_FALLBACK: {
     icon: Sparkles,
     label: "Fallback needs review",

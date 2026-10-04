@@ -101,6 +101,8 @@ function buildDecisionReviewComment(context: PRContext, decision: DecisionMemory
   const pendingReason =
     decision.reviewReason === "MISSING_EXPLANATION"
       ? "DecisionCapture found a meaningful technical change, but the PR context does not clearly explain why this approach was chosen."
+      : decision.reviewReason === "INCOMPLETE_CONTEXT"
+        ? "DecisionCapture captured the decision and rationale, but the expected impact is not recorded yet."
       : decision.reviewReason === "STRUCTURED_FALLBACK"
         ? "DecisionCapture used the structured fallback extractor and needs a human check before saving this memory."
         : decision.reviewReason === "REVIEW_REOPENED"
@@ -109,6 +111,8 @@ function buildDecisionReviewComment(context: PRContext, decision: DecisionMemory
   const pendingAsk =
     decision.reviewReason === "MISSING_EXPLANATION"
       ? "can you add the missing rationale and approve, edit, or reject this captured memory?"
+      : decision.reviewReason === "INCOMPLETE_CONTEXT"
+        ? "can you add the impact, then approve, edit, or reject this captured memory?"
       : decision.reviewReason === "REVIEW_REOPENED"
         ? "can you confirm, edit, or reject the reopened memory?"
       : "can you review the captured context and approve, edit, or reject it?";

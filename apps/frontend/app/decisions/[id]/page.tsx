@@ -46,6 +46,7 @@ import {
   formatExtractionMethod
 } from "../../../lib/decision-provenance";
 import {
+  hasDecisionDraftFields,
   hasDecisionReviewChanges,
   hasRequiredDecisionReviewFields,
   toDecisionReviewDraft,
@@ -257,6 +258,7 @@ export default function DecisionDetailPage() {
   const canReviewPendingDecision = Boolean(decision?.reviewPermissions?.canReview);
   const canReopen = Boolean(decision?.reviewPermissions?.canReopen);
   const isDirty = decision && formValue ? hasDecisionReviewChanges(decision, formValue) : false;
+  const hasDraftFields = formValue ? hasDecisionDraftFields(formValue) : false;
   const hasRequiredFields = formValue ? hasRequiredDecisionReviewFields(formValue) : false;
   const readOnlyMessage =
     decision?.status === "APPROVED"
@@ -465,7 +467,7 @@ export default function DecisionDetailPage() {
               <button
                 type="button"
                 onClick={() => updateMutation.mutate()}
-                disabled={!isDirty || !hasRequiredFields || isBusy}
+                disabled={!isDirty || !hasDraftFields || isBusy}
                 className="order-2 inline-flex min-h-10 items-center justify-center gap-2 whitespace-nowrap rounded-md border border-neutral-200 px-3 py-2 text-sm font-medium text-neutral-700 transition hover:bg-neutral-50 disabled:text-neutral-400"
                 title="Save draft without approving"
               >
@@ -552,26 +554,32 @@ export default function DecisionDetailPage() {
           {isEditing ? (
             <>
               <label className="block">
-                <span className="text-xs font-semibold uppercase tracking-normal text-neutral-500">Reason</span>
+                <span className="text-xs font-semibold uppercase tracking-normal text-neutral-500">Reason <span className="text-amber-700">Required</span></span>
                 <textarea
+                  aria-label="Reason"
+                  aria-required="true"
                   value={formValue?.reason ?? ""}
                   onChange={(event) => updateDraftField("reason", event.target.value)}
                   className="mt-1 min-h-28 w-full rounded-md border border-neutral-200 p-3 text-sm outline-none focus:border-neutral-400"
                 />
               </label>
               <label className="block">
-                <span className="text-xs font-semibold uppercase tracking-normal text-neutral-500">Alternative</span>
+                <span className="text-xs font-semibold uppercase tracking-normal text-neutral-500">Alternative <span className="font-normal normal-case tracking-normal text-neutral-400">Optional</span></span>
                 <textarea
+                  aria-label="Alternative"
                   value={formValue?.alternative ?? ""}
                   onChange={(event) => updateDraftField("alternative", event.target.value)}
                   className="mt-1 min-h-20 w-full rounded-md border border-neutral-200 p-3 text-sm outline-none focus:border-neutral-400"
                 />
               </label>
               <label className="block">
-                <span className="text-xs font-semibold uppercase tracking-normal text-neutral-500">Impact</span>
+                <span className="text-xs font-semibold uppercase tracking-normal text-neutral-500">Impact <span className="text-amber-700">Required to approve</span></span>
                 <textarea
+                  aria-label="Impact"
+                  aria-required="true"
                   value={formValue?.impact ?? ""}
                   onChange={(event) => updateDraftField("impact", event.target.value)}
+                  placeholder={'Describe the effect, or write \'No runtime impact.\''}
                   className="mt-1 min-h-24 w-full rounded-md border border-neutral-200 p-3 text-sm outline-none focus:border-neutral-400"
                 />
               </label>
@@ -580,7 +588,7 @@ export default function DecisionDetailPage() {
             <dl className="space-y-5">
               <Field label="Reason" value={decision.reason} />
               <Field label="Alternative" value={decision.alternative ?? "No alternative captured"} />
-              <Field label="Impact" value={decision.impact} />
+              <Field label="Impact" value={decision.impact || "Not recorded"} />
             </dl>
           )}
         </div>

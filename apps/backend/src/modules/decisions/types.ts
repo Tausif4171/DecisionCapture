@@ -12,7 +12,7 @@ export type DecisionReviewUpdates = {
   decision?: string;
   reason?: string;
   alternative?: string | null;
-  impact?: string;
+  impact?: string | null;
 };
 
 export type DecisionReopenInput = {
