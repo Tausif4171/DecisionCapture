@@ -45,6 +45,8 @@ export async function invalidateRelationshipsForReopenedDecision(decisionId: str
   try {
     const { decisionRelationshipService } = await import("../relationships/service.js");
     await decisionRelationshipService.invalidateForReopenedDecision(decisionId);
+    const { conflictService } = await import("../conflicts/service.js");
+    await conflictService.invalidateForReopenedDecision(decisionId);
   } catch (error) {
     logger.error(
       { error, decisionId },

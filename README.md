@@ -21,6 +21,8 @@ Engineering decisions are often buried in merged PRs, review comments, and commi
 - Posts and updates GitHub PR comments when a decision needs review or is approved, rejected, or reopened.
 - Stores decision memory, review state, and audit history in PostgreSQL.
 - Provides a dashboard for decision search, detail review, category overview, and human confirmation.
+- Watches eligible open pull requests for possible conflicts with earlier approved or rejected decisions.
+- Publishes advisory GitHub checks and one upserted review comment without blocking merges.
 
 ## Design Choices
 
@@ -134,7 +136,7 @@ docker compose down -v
 docker compose up -d
 ```
 
-The Docker stack runs `npm run db:push` on startup so the database schema stays aligned with the current Prisma model.
+The Docker stack runs `npm run db:sync` on startup. It enables pgvector when the database supports it, synchronizes the schema, and keeps the existing application bootable when conflict detection is disabled on a database that does not support pgvector. Enabling conflict detection requires pgvector.
 
 ## Local Development
 
@@ -187,6 +189,19 @@ For non-Docker development, provide PostgreSQL and Redis matching `.env.example`
 | `RELATIONSHIP_ANALYSIS_ENABLED` | Enables V3 decision relationship analysis. Defaults to `false` for a controlled rollout. |
 | `RELATIONSHIP_ANALYSIS_MAX_CANDIDATES` | Maximum approved decisions sent to relationship reasoning per analysis. Defaults to `12` and is capped at `25`. |
 | `RELATIONSHIP_CONFIDENCE_THRESHOLD` | Minimum confidence for related/builds-on suggestions. Defaults to `0.65`; supersession and conflict use stricter thresholds. |
+| `CONFLICT_DETECTION_ENABLED` | Enables V3 Phase 2 pre-review conflict detection. Defaults to `false`. |
+| `CONFLICT_DETECTION_REPOSITORIES` | Optional comma-separated repository allowlist. Empty means all repositories visible to the configured GitHub credentials. |
+| `CONFLICT_EMBEDDING_PROVIDER` | Embedding provider. The current implementation supports `ollama`. |
+| `CONFLICT_EMBEDDING_MODEL` | Ollama embedding model, default `nomic-embed-text`. |
+| `CONFLICT_EMBEDDING_DIMENSIONS` | Expected vector size. The migration creates a 768-dimension pgvector column by default. |
+| `CONFLICT_MAX_CANDIDATES` | Maximum candidates sent to contradiction analysis. Defaults to `20`. |
+| `CONFLICT_LEXICAL_CANDIDATE_LIMIT` | Maximum lexical candidates before embedding ranking. Defaults to `100`. |
+| `CONFLICT_SIMILARITY_THRESHOLD` | Minimum cosine similarity for embedding candidates. Defaults to `0.72`. |
+| `CONFLICT_CONFIDENCE_THRESHOLD` | Minimum analyzer confidence for a persisted warning. Defaults to `0.75`. |
+| `CONFLICT_COMMENT_ENABLED` | Enables the stable, upserted GitHub PR comment. |
+| `CONFLICT_CHECK_ENABLED` | Enables the `DecisionCapture: Potential conflict review` GitHub Check. |
+| `CONFLICT_SHADOW_MODE` | Runs detection and stores results without publishing GitHub feedback. |
+| `CONFLICT_QUEUE_CONCURRENCY` | Maximum concurrent Phase 2 jobs per worker. Defaults to `2`. |
 | `NEXT_PUBLIC_API_URL` | Browser-facing API base URL for the frontend. Use `/api` on Vercel so auth cookies stay same-origin. |
 | `API_INTERNAL_URL` | Server-side backend URL used by the frontend rewrite from `/api/*` to the backend. |
 
@@ -223,7 +238,8 @@ The response should show `"reachable": true` and `"modelAvailable": true`.
 - `GET /health` returns backend health.
 - `GET /health/ai` checks whether the configured Ollama endpoint and model are reachable.
 - `GET /health/queue` returns queue mode and worker health details.
-- `POST /github/webhook` receives GitHub `pull_request.closed` events and only analyzes merged PRs.
+- `GET /health/conflicts` reports Phase 2 flag, queue, pgvector, embedding, analyzer, and feedback readiness.
+- `POST /github/webhook` verifies GitHub signatures, preserves merged PR capture, and optionally queues Phase 2 scans for eligible open-PR events when `CONFLICT_DETECTION_ENABLED=true`.
 - `POST /decisions/analyze` accepts full PR context from the GitHub Action or manual ingestion and normally queues work asynchronously. Add `?wait=true` only for manual debugging when you want the processed result immediately.
 - `GET /decisions` searches decisions by keyword, status, repository, category, and sort.
 - `GET /decisions/stats` returns dashboard metrics and recent decisions.
@@ -274,13 +290,13 @@ Configure backend environment variables for GitHub-owned enrichment and PR feedb
 - Fallback: `GITHUB_API_TOKEN`, a PAT with access to the repositories you want to analyze. Comments appear as the PAT owner.
 - `APP_BASE_URL`, the public dashboard URL used in PR review links
 
-For the GitHub App, grant repository metadata read access, issues read access, and pull requests read/write access, then install it on the repositories DecisionCapture should analyze. Subscribe the app webhook to `pull_request`, `issues`, `issue_comment`, `installation`, and `installation_repositories`. Keep OAuth App credentials for human dashboard sign-in separate from GitHub App credentials for backend automation.
+For the GitHub App, grant repository metadata read access, contents read access, issues read/write access, pull requests read/write access, and checks write access, then install it on the repositories DecisionCapture should analyze. Subscribe the app webhook to `pull_request`, `issues`, `issue_comment`, `installation`, and `installation_repositories`. Keep OAuth App credentials for human dashboard sign-in separate from GitHub App credentials for backend automation.
 
 The workflow collects PR metadata, a bounded diff summary, formal reviews, normal PR conversation comments, labels, approvals, and changed files, then sends that payload to `POST /decisions/analyze` without waiting for inline processing. The BullMQ worker owns analysis, author-tagged pending review comment creation, and later PR comment updates when a reviewer approves or rejects the decision from the dashboard.
 
 If you want to test this from a local machine, expose the backend with a tunnel and use that public URL as `DECISIONCAPTURE_API_URL`. Set `APP_BASE_URL` to a reachable dashboard URL if you want PR comments to contain clickable review links.
 
-For direct webhooks, set the GitHub webhook secret to match `GITHUB_WEBHOOK_SECRET`. With `GITHUB_API_TOKEN` configured, webhook-only ingestion fetches the same rich PR context the requirements call for instead of relying on the limited webhook payload alone.
+For direct webhooks, set the GitHub webhook secret to match `GITHUB_WEBHOOK_SECRET`. With `GITHUB_API_TOKEN` configured, webhook-only ingestion fetches the same rich PR context the requirements call for instead of relying on the limited webhook payload alone. For Phase 2, subscribe to `pull_request` events and grant checks and issue-comment write access so advisory feedback can be synchronized.
 
 ### GitHub Issue Context
 
@@ -311,6 +327,14 @@ RELATIONSHIP_CONFIDENCE_THRESHOLD=0.65
 ```
 
 Keep `QUEUE_MODE=bullmq` and a worker enabled in production. Relationship analysis runs on its own queue with concurrency `1`; failures are recorded for retry and do not block PR ingestion, decision review, or GitHub issue synchronization.
+
+## V3 Phase 2: Pre-review Conflict Intelligence
+
+For rollout, webhook setup, candidate bounds, GitHub feedback, permissions, failure recovery, and rollback, see [the V3 Phase 2 conflict-intelligence runbook](docs/v3-decision-intelligence-runbook.md).
+
+Phase 2 is separate from Phase 1. It listens for signed GitHub `pull_request` events for `opened`, `edited`, `reopened`, `synchronize`, and `ready_for_review`, while keeping merged `closed` capture unchanged. Draft PRs are skipped until they become ready for review. The detector first retrieves at most `CONFLICT_LEXICAL_CANDIDATE_LIMIT` approved or rejected decisions from the same repository, then ranks at most `CONFLICT_MAX_CANDIDATES` with embeddings before asking Ollama for evidence-backed contradiction analysis.
+
+Warnings are advisory. They are phrased as possible conflicts, are stored separately from decision relationships, and require an authorized human to dismiss or resolve them. Ollama, pgvector, Redis, or GitHub API failures mark the scan unavailable without blocking the PR or changing V1 capture, V2 issue linking, or Phase 1 relationships.
 
 ## Dashboard Auth and RBAC
 

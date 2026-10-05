@@ -3,22 +3,17 @@ import { env } from "../../config/env.js";
 import { HttpError } from "../../middleware/error.js";
 import { analyzeOrQueue } from "../queue/service.js";
 import { contextWebhookService } from "../contexts/webhook.service.js";
-import { enrichWebhookToPRContext, shouldProcessPullRequestWebhook } from "./service.js";
+import {
+  enrichWebhookToPRContext,
+  shouldProcessConflictWebhook,
+  shouldProcessPullRequestWebhook
+} from "./service.js";
 import { verifyGitHubSignature } from "./signature.js";
 import { githubPullRequestWebhookSchema } from "./validation.js";
+import { conflictService } from "../conflicts/service.js";
 
 export async function githubWebhook(request: Request, response: Response) {
   const eventName = request.header("x-github-event");
-  const pullRequestPayload =
-    eventName === "pull_request" ? githubPullRequestWebhookSchema.parse(request.body) : null;
-
-  if (pullRequestPayload && !shouldProcessPullRequestWebhook(pullRequestPayload)) {
-    return response.status(202).json({
-      status: "ignored",
-      message: "Only merged pull_request.closed events are analyzed"
-    });
-  }
-
   const signature = request.header("x-hub-signature-256");
   const rawBody = request.rawBody ?? JSON.stringify(request.body);
 
@@ -28,6 +23,22 @@ export async function githubWebhook(request: Request, response: Response) {
 
   if (!verifyGitHubSignature(rawBody, signature, env.GITHUB_WEBHOOK_SECRET)) {
     throw new HttpError(401, "Invalid GitHub webhook signature");
+  }
+
+  const pullRequestPayload =
+    eventName === "pull_request" ? githubPullRequestWebhookSchema.parse(request.body) : null;
+  const shouldCaptureMergedDecision = Boolean(
+    pullRequestPayload && shouldProcessPullRequestWebhook(pullRequestPayload)
+  );
+  const shouldAnalyzeConflict = Boolean(
+    pullRequestPayload && shouldProcessConflictWebhook(pullRequestPayload)
+  );
+
+  if (pullRequestPayload && !shouldCaptureMergedDecision && !shouldAnalyzeConflict) {
+    return response.status(202).json({
+      status: "ignored",
+      message: "This pull_request event is outside the enabled DecisionCapture workflows"
+    });
   }
 
   if (["issues", "issue_comment", "installation", "installation_repositories"].includes(eventName ?? "")) {
@@ -49,6 +60,18 @@ export async function githubWebhook(request: Request, response: Response) {
       status: "ignored",
       message: `Ignoring GitHub event ${eventName ?? "unknown"}`
     });
+  }
+
+  if (shouldAnalyzeConflict) {
+    const deliveryId = request.header("x-github-delivery");
+    if (!deliveryId) {
+      throw new HttpError(400, "GitHub webhook delivery id is required");
+    }
+
+    const result = await conflictService.receiveWebhook(eventName, deliveryId, request.body);
+    if (!shouldCaptureMergedDecision) {
+      return response.status(result.status === "queued" ? 202 : 200).json(result);
+    }
   }
 
   const context = await enrichWebhookToPRContext(pullRequestPayload!);

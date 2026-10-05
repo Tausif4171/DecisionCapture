@@ -9,6 +9,9 @@ import type {
   DecisionRelationship,
   DecisionRelationshipAnalysisResponse,
   DecisionRelationshipOverview,
+  ConflictOverview,
+  ConflictScan,
+  DecisionConflict,
   DecisionStats,
   ExternalContextType,
   GitHubConnectionStatus,
@@ -145,6 +148,29 @@ export function dismissDecisionRelationship(id: string, relationshipId: string, 
       body: JSON.stringify(note ? { note } : {})
     }
   );
+}
+
+export function getDecisionConflicts(id: string) {
+  return request<ConflictOverview>(`/decisions/${id}/conflicts`);
+}
+
+export function listConflicts(query: Query = {}) {
+  return request<ConflictOverview>(`/conflicts${toSearchParams(query)}`);
+}
+
+export function getConflict(id: string) {
+  return request<DecisionConflict>(`/conflicts/${id}`);
+}
+
+export function getConflictScan(id: string) {
+  return request<ConflictScan>(`/conflict-scans/${id}`);
+}
+
+export function reviewConflict(id: string, action: "dismiss" | "resolve", note?: string) {
+  return request<DecisionConflict>(`/conflicts/${id}`, {
+    method: "PATCH",
+    body: JSON.stringify({ action, ...(note ? { note } : {}) })
+  });
 }
 
 export function createDecisionContextLink(

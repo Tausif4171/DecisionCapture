@@ -107,6 +107,41 @@ enum DecisionRelationshipAnalysisStatus {
   FAILED
 }
 
+enum PullRequestState {
+  OPEN
+  CLOSED
+}
+
+enum ConflictScanStatus {
+  PENDING
+  RUNNING
+  COMPLETED
+  FAILED
+  SKIPPED
+}
+
+enum DecisionConflictStatus {
+  OPEN
+  DISMISSED
+  RESOLVED
+  STALE
+}
+
+enum ConflictMatchMethod {
+  LEXICAL
+  EMBEDDING
+  HYBRID
+}
+
+enum ConflictAuditAction {
+  DETECTED
+  DISMISSED
+  RESOLVED
+  STALE
+  COMMENT_SYNCED
+  CHECK_UPDATED
+}
+
 model AppUser {
   id                String              @id @default(cuid())
   githubId          String              @unique
@@ -123,6 +158,8 @@ model AppUser {
   createdContextLinks DecisionContextLink[]
   providerConnections ProviderConnection[]
   reviewedRelationships DecisionRelationship[]
+  reviewedConflicts DecisionConflict[]
+  conflictAuditLogs ConflictAuditLog[]
 
   @@index([role])
   @@map("app_users")
@@ -138,11 +175,22 @@ model PullRequestRecord {
   url           String
   repository    String
   sourcePayload Json?
+  state         PullRequestState @default(CLOSED)
+  isDraft       Boolean          @default(false)
+  baseBranch    String?
+  headSha       String?
+  contentHash   String?
+  lastConflictScanAt DateTime?
   createdAt     DateTime         @default(now())
+  updatedAt     DateTime         @updatedAt
   decisions     DecisionMemory[]
+  conflictScans ConflictScan[]
+  conflicts     DecisionConflict[]
 
   @@unique([repository, prNumber])
   @@index([repository, createdAt])
+  @@index([repository, state])
+  @@index([repository, headSha])
   @@map("pr_records")
 }
 
@@ -180,6 +228,8 @@ model DecisionMemory {
   outgoingRelationships DecisionRelationship[]        @relation("DecisionRelationshipSource")
   incomingRelationships DecisionRelationship[]        @relation("DecisionRelationshipTarget")
   relationshipAnalysis  DecisionRelationshipAnalysis?
+  conflicts             DecisionConflict[]
+  embeddings            DecisionEmbedding[]
 
   @@index([status])
   @@index([repository])
@@ -354,4 +404,101 @@ model DecisionRelationshipAnalysis {
 
   @@index([status])
   @@map("decision_relationship_analyses")
+}
+
+model ConflictScan {
+  id                 String            @id @default(cuid())
+  pullRequestRecordId String
+  pullRequestRecord  PullRequestRecord @relation(fields: [pullRequestRecordId], references: [id], onDelete: Cascade)
+  repository         String
+  prNumber           Int
+  headSha            String
+  contentHash        String
+  status             ConflictScanStatus @default(PENDING)
+  candidateCount     Int               @default(0)
+  conflictCount      Int               @default(0)
+  error              String?
+  lastAttemptAt      DateTime?
+  lastSuccessAt      DateTime?
+  createdAt          DateTime          @default(now())
+  updatedAt          DateTime          @updatedAt
+  conflicts          DecisionConflict[]
+
+  @@unique([repository, prNumber, headSha, contentHash])
+  @@index([repository, prNumber, status])
+  @@index([pullRequestRecordId])
+  @@index([headSha])
+  @@map("conflict_scans")
+}
+
+model DecisionConflict {
+  id                 String                 @id @default(cuid())
+  scanId             String
+  scan               ConflictScan           @relation(fields: [scanId], references: [id], onDelete: Cascade)
+  pullRequestRecordId String
+  pullRequestRecord  PullRequestRecord     @relation(fields: [pullRequestRecordId], references: [id], onDelete: Cascade)
+  decisionId         String
+  decision           DecisionMemory         @relation(fields: [decisionId], references: [id], onDelete: Cascade)
+  repository         String
+  prNumber           Int
+  prUrl              String
+  prTitle            String
+  headSha            String
+  similarityScore    Float
+  confidence         Float
+  explanation        String
+  evidence           String[]               @default([])
+  matchMethod        ConflictMatchMethod
+  status             DecisionConflictStatus @default(OPEN)
+  reviewedByUserId   String?
+  reviewedBy         AppUser?               @relation(fields: [reviewedByUserId], references: [id], onDelete: SetNull)
+  reviewedByLogin    String?
+  reviewedAt         DateTime?
+  reviewNote         String?
+  createdAt          DateTime               @default(now())
+  updatedAt          DateTime               @updatedAt
+  auditLogs          ConflictAuditLog[]
+
+  @@unique([scanId, decisionId])
+  @@index([repository, prNumber, status])
+  @@index([decisionId, status])
+  @@index([pullRequestRecordId, status])
+  @@index([headSha])
+  @@map("decision_conflicts")
+}
+
+model ConflictAuditLog {
+  id          String              @id @default(cuid())
+  conflictId  String
+  conflict    DecisionConflict    @relation(fields: [conflictId], references: [id], onDelete: Cascade)
+  action      ConflictAuditAction
+  actorUserId String?
+  actor       AppUser?            @relation(fields: [actorUserId], references: [id], onDelete: SetNull)
+  actorLogin  String?
+  note        String?
+  before      Json?
+  after       Json?
+  createdAt   DateTime            @default(now())
+
+  @@index([conflictId])
+  @@index([actorUserId])
+  @@index([action])
+  @@index([createdAt])
+  @@map("conflict_audit_logs")
+}
+
+model DecisionEmbedding {
+  id          String   @id @default(cuid())
+  decisionId  String
+  decision    DecisionMemory @relation(fields: [decisionId], references: [id], onDelete: Cascade)
+  model       String
+  dimensions  Int
+  textHash    String
+  embedding   Unsupported("vector")
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@unique([decisionId, model, textHash])
+  @@index([decisionId, model])
+  @@map("decision_embeddings")
 }

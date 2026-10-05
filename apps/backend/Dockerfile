@@ -14,4 +14,4 @@ RUN npm run build -w @decisioncapture/backend
 
 EXPOSE 4000
 
-CMD ["sh", "-c", "npm run db:push -w @decisioncapture/backend && npm run start -w @decisioncapture/backend"]
+CMD ["sh", "-c", "npm run db:sync -w @decisioncapture/backend && npm run start -w @decisioncapture/backend"]

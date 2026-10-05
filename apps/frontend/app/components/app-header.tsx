@@ -2,13 +2,14 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { DatabaseZap, GitPullRequestArrow, SearchCheck } from "lucide-react";
+import { DatabaseZap, GitPullRequestArrow, SearchCheck, ShieldAlert } from "lucide-react";
 import { AuthStatusControl } from "./auth-status";
 
 const navItems = [
   { href: "/", label: "Dashboard", icon: DatabaseZap },
   { href: "/decisions", label: "Decisions", icon: SearchCheck },
-  { href: "/pending", label: "Review queue", icon: GitPullRequestArrow }
+  { href: "/pending", label: "Review queue", icon: GitPullRequestArrow },
+  { href: "/conflicts", label: "Conflicts", icon: ShieldAlert }
 ];
 
 function isActivePath(pathname: string, href: string) {

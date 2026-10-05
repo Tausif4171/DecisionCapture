@@ -25,6 +25,7 @@ import {
   dismissDecisionRelationship,
   getDecisionRelationships
 } from "../relationships/controller.js";
+import { getDecisionConflicts } from "../conflicts/controller.js";
 
 export const decisionsRouter = Router();
 
@@ -39,6 +40,7 @@ const decisionRoutePaths = {
   relationshipAnalysis: "/:id/relationships/analyze",
   relationshipAccept: "/:id/relationships/:relationshipId/accept",
   relationshipDismiss: "/:id/relationships/:relationshipId/dismiss",
+  conflicts: "/:id/conflicts",
   detail: "/:id",
   audit: "/:id/audit",
   approve: "/:id/approve",
@@ -58,6 +60,7 @@ decisionsRouter.get(decisionRoutePaths.relationships, asyncHandler(getDecisionRe
 decisionsRouter.post(decisionRoutePaths.relationshipAnalysis, asyncHandler(analyzeDecisionRelationships));
 decisionsRouter.patch(decisionRoutePaths.relationshipAccept, asyncHandler(acceptDecisionRelationship));
 decisionsRouter.patch(decisionRoutePaths.relationshipDismiss, asyncHandler(dismissDecisionRelationship));
+decisionsRouter.get(decisionRoutePaths.conflicts, asyncHandler(getDecisionConflicts));
 decisionsRouter.get(decisionRoutePaths.detail, asyncHandler(getDecision));
 decisionsRouter.get(decisionRoutePaths.audit, asyncHandler(listDecisionAuditLogs));
 decisionsRouter.patch(decisionRoutePaths.detail, asyncHandler(updateDecision));

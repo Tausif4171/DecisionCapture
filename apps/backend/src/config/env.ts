@@ -6,6 +6,11 @@ const booleanFromString = z
   .default(false)
   .transform((value) => value === true || value === "true");
 
+const booleanEnabledByDefault = z
+  .union([z.boolean(), z.string()])
+  .default(true)
+  .transform((value) => value === true || value === "true");
+
 const optionalNonEmptyString = z.preprocess(
   (value) => (value === "" ? undefined : value),
   z.string().min(1).optional()
@@ -49,7 +54,20 @@ const envSchema = z
     DECISION_SCORE_THRESHOLD: z.coerce.number().min(0).max(100).default(35),
     RELATIONSHIP_ANALYSIS_ENABLED: booleanFromString,
     RELATIONSHIP_ANALYSIS_MAX_CANDIDATES: z.coerce.number().int().min(1).max(25).default(12),
-    RELATIONSHIP_CONFIDENCE_THRESHOLD: z.coerce.number().min(0).max(1).default(0.65)
+    RELATIONSHIP_CONFIDENCE_THRESHOLD: z.coerce.number().min(0).max(1).default(0.65),
+    CONFLICT_DETECTION_ENABLED: booleanFromString,
+    CONFLICT_DETECTION_REPOSITORIES: z.string().optional().default(""),
+    CONFLICT_EMBEDDING_PROVIDER: z.enum(["ollama"]).default("ollama"),
+    CONFLICT_EMBEDDING_MODEL: z.string().default("nomic-embed-text"),
+    CONFLICT_EMBEDDING_DIMENSIONS: z.coerce.number().int().min(1).max(4096).default(768),
+    CONFLICT_MAX_CANDIDATES: z.coerce.number().int().min(1).max(50).default(20),
+    CONFLICT_LEXICAL_CANDIDATE_LIMIT: z.coerce.number().int().min(10).max(500).default(100),
+    CONFLICT_SIMILARITY_THRESHOLD: z.coerce.number().min(0).max(1).default(0.72),
+    CONFLICT_CONFIDENCE_THRESHOLD: z.coerce.number().min(0).max(1).default(0.75),
+    CONFLICT_COMMENT_ENABLED: booleanEnabledByDefault,
+    CONFLICT_CHECK_ENABLED: booleanEnabledByDefault,
+    CONFLICT_SHADOW_MODE: booleanFromString,
+    CONFLICT_QUEUE_CONCURRENCY: z.coerce.number().int().min(1).max(10).default(2)
   })
   .superRefine((values, context) => {
     if (values.AUTH_MODE !== "github") {
@@ -93,6 +111,15 @@ const envSchema = z
         path: ["AUTH_ALLOWED_LOGINS"],
         message:
           "At least one allowed or role-assigned GitHub login is required when AUTH_MODE=github unless AUTH_GITHUB_PUBLIC_VIEWERS=true"
+      });
+    }
+  })
+  .superRefine((values, context) => {
+    if (values.CONFLICT_EMBEDDING_DIMENSIONS !== 768) {
+      context.addIssue({
+        code: "custom",
+        path: ["CONFLICT_EMBEDDING_DIMENSIONS"],
+        message: "The initial pgvector migration uses 768 dimensions; add a migration before changing this value"
       });
     }
   })

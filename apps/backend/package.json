@@ -12,6 +12,7 @@
     "test": "vitest run",
     "db:generate": "prisma generate",
     "db:push": "prisma db push",
+    "db:sync": "node scripts/sync-database.mjs",
     "db:migrate": "prisma migrate dev",
     "db:deploy": "prisma migrate deploy",
     "worker": "tsx src/modules/queue/worker.ts"
