@@ -10,7 +10,7 @@ function toCandidate(record: {
   decision: string;
   reason: string;
   alternative: string | null;
-  impact: string;
+  impact: string | null;
   status: DecisionStatus;
   category: string;
   repository: string;
@@ -41,7 +41,7 @@ export async function retrieveConflictCandidates(context: ConflictPullRequestCon
       decision: string;
       reason: string;
       alternative: string | null;
-      impact: string;
+      impact: string | null;
       status: DecisionStatus;
       category: string;
       repository: string;

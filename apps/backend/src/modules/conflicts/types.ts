@@ -17,7 +17,7 @@ export type ConflictCandidate = {
   decision: string;
   reason: string;
   alternative?: string | null;
-  impact: string;
+  impact: string | null;
   status: DecisionStatus;
   category: string;
   repository: string;
