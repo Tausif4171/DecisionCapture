@@ -136,7 +136,7 @@ docker compose down -v
 docker compose up -d
 ```
 
-The Docker stack runs `npm run db:sync` on startup. It enables pgvector when the database supports it, synchronizes the schema, and keeps the existing application bootable when conflict detection is disabled on a database that does not support pgvector. Enabling conflict detection requires pgvector.
+The Docker stack runs `npm run db:sync` on startup. It enables pgvector when the database supports it, applies checked-in Prisma migrations, and keeps the existing application bootable when conflict detection is disabled on a database that does not support pgvector. Enabling conflict detection requires pgvector.
 
 ## Local Development
 

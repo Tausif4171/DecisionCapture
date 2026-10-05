@@ -23,7 +23,7 @@ GitHub pull_request webhook
 
 ## Scope and Configuration
 
-Apply the additive Prisma migration before enabling the flag. The migration requires PostgreSQL with the `vector` extension and creates a 768-dimension vector column. Keep the configured embedding model at a compatible dimension. Docker startup uses `npm run db:sync`: it attempts to enable the extension and synchronizes the schema when pgvector is available; with the feature disabled, it leaves an existing non-vector deployment bootable. Enabling conflict detection must fail fast if pgvector cannot be prepared.
+Apply the additive Prisma migration before enabling the flag. The migration requires PostgreSQL with the `vector` extension and creates a 768-dimension vector column. Keep the configured embedding model at a compatible dimension. Docker startup uses `npm run db:sync`: it attempts to enable the extension and applies checked-in Prisma migrations when pgvector is available; with the feature disabled, it leaves an existing non-vector deployment bootable. Enabling conflict detection must fail fast if pgvector cannot be prepared.
 
 ```env
 CONFLICT_DETECTION_ENABLED=false
@@ -54,6 +54,8 @@ Deploy the migration with the backend package:
 npm run db:generate -w @decisioncapture/backend
 npm run db:deploy -w @decisioncapture/backend
 ```
+
+The Render Docker startup runs `npm run db:sync -w @decisioncapture/backend` before starting the server. When pgvector is available, that script runs `prisma migrate deploy` automatically, so a Render free instance does not require Shell or one-off job access. Keep the feature disabled while the migration is being applied.
 
 Check readiness before enabling warnings:
 

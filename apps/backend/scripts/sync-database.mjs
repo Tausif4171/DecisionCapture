@@ -30,7 +30,7 @@ if (!vectorReady && !conflictDetectionEnabled) {
   process.exit(0);
 }
 
-const child = spawn("npm", ["run", "db:push"], {
+const child = spawn("npm", ["run", "db:deploy"], {
   stdio: "inherit",
   shell: false
 });
