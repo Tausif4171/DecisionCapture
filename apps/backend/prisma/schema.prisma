@@ -182,7 +182,7 @@ model PullRequestRecord {
   contentHash   String?
   lastConflictScanAt DateTime?
   createdAt     DateTime         @default(now())
-  updatedAt     DateTime         @updatedAt
+  updatedAt     DateTime         @default(now()) @updatedAt
   decisions     DecisionMemory[]
   conflictScans ConflictScan[]
   conflicts     DecisionConflict[]
