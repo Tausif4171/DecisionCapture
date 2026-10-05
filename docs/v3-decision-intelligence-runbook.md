@@ -55,7 +55,7 @@ npm run db:generate -w @decisioncapture/backend
 npm run db:deploy -w @decisioncapture/backend
 ```
 
-The Render Docker startup runs `npm run db:sync -w @decisioncapture/backend` before starting the server. When pgvector is available, that script runs `prisma migrate deploy` automatically, so a Render free instance does not require Shell or one-off job access. Keep the feature disabled while the migration is being applied.
+The Render Docker startup runs `npm run db:sync -w @decisioncapture/backend` before starting the server. When pgvector is available, that script detects an existing DecisionCapture schema with no Prisma migration history, marks the checked-in baseline migration as applied, and then runs `prisma migrate deploy` for the additive Phase 2 migration. Fresh databases apply the baseline and Phase 2 migrations normally. A Render free instance therefore does not require Shell or one-off job access. Keep the feature disabled while the migration is being applied.
 
 Check readiness before enabling warnings:
 
