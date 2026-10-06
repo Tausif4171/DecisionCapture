@@ -1,12 +1,12 @@
-# Test Authentication Policy
+# Test Authentication Policy Proposal
 
 ## Decision
 
-Do not introduce token-based authentication in this service.
+Evaluate introducing token-based authentication for this service.
 
 ## Reason
 
-The current session-based authentication flow remains the security boundary for this test. Adding another authentication mechanism would increase security and maintenance risk.
+This PR evaluates token authentication as a possible API authentication path.
 
 ## Alternative
 
@@ -14,4 +14,4 @@ Keep the existing session-based authentication flow.
 
 ## Impact
 
-Authentication behavior remains unchanged.
+Authentication behavior would change and requires security review.
