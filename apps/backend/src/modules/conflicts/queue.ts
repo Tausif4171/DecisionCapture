@@ -6,6 +6,16 @@ import { conflictService } from "./service.js";
 
 export const CONFLICT_QUEUE_NAME = "conflict-detection";
 
+// BullMQ rejects custom job IDs containing a colon. Keep IDs deterministic and
+// delimiter-safe so webhook and scan jobs can be enqueued in production.
+export function buildConflictWebhookJobId(webhookEventId: string) {
+  return `conflict-webhook-${webhookEventId}`;
+}
+
+export function buildConflictScanJobId(scanId: string) {
+  return `conflict-scan-${scanId}`;
+}
+
 type ConflictQueuePayload =
   | { kind: "process-webhook"; webhookEventId: string }
   | { kind: "run-scan"; scanId: string };
@@ -46,11 +56,11 @@ async function enqueue(payload: ConflictQueuePayload, jobId: string) {
 }
 
 export function enqueueConflictWebhook(webhookEventId: string) {
-  return enqueue({ kind: "process-webhook", webhookEventId }, `conflict-webhook:${webhookEventId}`);
+  return enqueue({ kind: "process-webhook", webhookEventId }, buildConflictWebhookJobId(webhookEventId));
 }
 
 export function scheduleConflictScan(scanId: string) {
-  return enqueue({ kind: "run-scan", scanId }, `conflict-scan:${scanId}`);
+  return enqueue({ kind: "run-scan", scanId }, buildConflictScanJobId(scanId));
 }
 
 export function startConflictWorker() {
