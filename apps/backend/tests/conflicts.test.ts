@@ -2,6 +2,10 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { buildConflictPrText, conflictSearchTerms, contentHash } from "../src/modules/conflicts/text.js";
 import { conflictAssessmentResponseSchema, conflictReviewSchema } from "../src/modules/conflicts/validation.js";
 import { buildConflictPrompt, OllamaConflictAnalyzer } from "../src/modules/conflicts/analyzer.js";
+import {
+  buildConflictScanJobId,
+  buildConflictWebhookJobId
+} from "../src/modules/conflicts/queue.js";
 import type { ConflictCandidate, ConflictPullRequestContext } from "../src/modules/conflicts/types.js";
 
 const context: ConflictPullRequestContext = {
@@ -55,6 +59,16 @@ describe("conflict intelligence boundaries", () => {
     expect(contentHash("same content")).toBe(contentHash("same content"));
     expect(contentHash("same content")).not.toBe(contentHash("changed content"));
     expect(buildConflictPrText(context)).toContain("Bring back JWT authentication");
+  });
+
+  it("builds BullMQ-safe deterministic job IDs for webhook and scan work", () => {
+    const webhookJobId = buildConflictWebhookJobId("cm-webhook-123");
+    const scanJobId = buildConflictScanJobId("cm-scan-456");
+
+    expect(webhookJobId).toBe("conflict-webhook-cm-webhook-123");
+    expect(scanJobId).toBe("conflict-scan-cm-scan-456");
+    expect(webhookJobId).not.toContain(":");
+    expect(scanJobId).not.toContain(":");
   });
 
   it("requires a bounded, evidence-backed review payload", () => {
