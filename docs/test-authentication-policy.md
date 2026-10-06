@@ -15,3 +15,5 @@ Keep the existing session-based authentication flow.
 ## Impact
 
 Authentication behavior would change and requires security review.
+
+This document remains a documentation-only test fixture and does not change runtime authentication.
