@@ -17,3 +17,7 @@ Keep the existing session-based authentication flow.
 Authentication behavior would change and requires security review.
 
 This document remains a documentation-only test fixture and does not change runtime authentication.
+
+## Test maintenance
+
+This follow-up refreshes the fixture for conflict-scan verification only; runtime authentication remains unchanged.
