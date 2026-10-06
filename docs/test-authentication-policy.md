@@ -2,11 +2,11 @@
 
 ## Decision
 
-Evaluate introducing token-based authentication for this service.
+Replace the existing session-based authentication with token-based authentication for this service.
 
 ## Reason
 
-This PR evaluates token authentication as a possible API authentication path.
+The API should authenticate requests with token-based authentication instead of the current session-based flow.
 
 ## Alternative
 
