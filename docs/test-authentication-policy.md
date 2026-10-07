@@ -25,3 +25,5 @@ This follow-up refreshes the fixture for conflict-scan verification only; runtim
 The fixture remains intentionally unmerged until the advisory warning workflow is verified.
 
 Feedback verification remains advisory and must not block merging this test PR.
+
+Webhook delivery idempotency is verified separately from conflict analysis.
