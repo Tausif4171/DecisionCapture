@@ -21,3 +21,5 @@ This document remains a documentation-only test fixture and does not change runt
 ## Test maintenance
 
 This follow-up refreshes the fixture for conflict-scan verification only; runtime authentication remains unchanged.
+
+The fixture remains intentionally unmerged until the advisory warning workflow is verified.
