@@ -23,3 +23,5 @@ This document remains a documentation-only test fixture and does not change runt
 This follow-up refreshes the fixture for conflict-scan verification only; runtime authentication remains unchanged.
 
 The fixture remains intentionally unmerged until the advisory warning workflow is verified.
+
+Feedback verification remains advisory and must not block merging this test PR.
