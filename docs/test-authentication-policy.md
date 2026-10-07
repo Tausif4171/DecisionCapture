@@ -27,3 +27,5 @@ The fixture remains intentionally unmerged until the advisory warning workflow i
 Feedback verification remains advisory and must not block merging this test PR.
 
 Webhook delivery idempotency is verified separately from conflict analysis.
+
+This refresh is a harmless documentation change for the post-permission feedback check.
