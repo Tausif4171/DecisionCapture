@@ -1,12 +1,12 @@
-# Test Authentication Policy
+# Test Authentication Policy Proposal
 
 ## Decision
 
-Do not introduce token-based authentication in this service.
+Replace the existing session-based authentication with token-based authentication for this service.
 
 ## Reason
 
-The current session-based authentication flow remains the security boundary for this test. Adding another authentication mechanism would increase security and maintenance risk.
+The API should authenticate requests with token-based authentication instead of the current session-based flow.
 
 ## Alternative
 
@@ -14,4 +14,18 @@ Keep the existing session-based authentication flow.
 
 ## Impact
 
-Authentication behavior remains unchanged.
+Authentication behavior would change and requires security review.
+
+This document remains a documentation-only test fixture and does not change runtime authentication.
+
+## Test maintenance
+
+This follow-up refreshes the fixture for conflict-scan verification only; runtime authentication remains unchanged.
+
+The fixture remains intentionally unmerged until the advisory warning workflow is verified.
+
+Feedback verification remains advisory and must not block merging this test PR.
+
+Webhook delivery idempotency is verified separately from conflict analysis.
+
+This refresh is a harmless documentation change for the post-permission feedback check.
