@@ -16,7 +16,7 @@ export default function ConflictsPage() {
     enabled: access.canLoadProtectedData
   });
   const reviewMutation = useMutation({
-    mutationFn: ({ id, action, note }: { id: string; action: "dismiss" | "resolve"; note: string }) => reviewConflict(id, action, note),
+    mutationFn: ({ id, action }: { id: string; action: "dismiss" | "resolve" }) => reviewConflict(id, action),
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: ["conflicts"] });
     }
@@ -69,8 +69,7 @@ export default function ConflictsPage() {
               conflict={conflict}
               canManage={overview.canManage}
               busy={reviewMutation.isPending && reviewMutation.variables?.id === conflict.id}
-              reviewError={reviewMutation.variables?.id === conflict.id && reviewMutation.isError ? reviewMutation.error : null}
-              onReview={(action, note) => reviewMutation.mutate({ id: conflict.id, action, note })}
+              onReview={(action) => reviewMutation.mutate({ id: conflict.id, action })}
             />
           ))}
         </section>
