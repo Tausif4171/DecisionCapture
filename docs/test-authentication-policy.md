@@ -15,3 +15,7 @@ Keep the existing session-based authentication flow.
 ## Impact
 
 Authentication behavior remains unchanged.
+
+## Follow-up Evaluation
+
+This follow-up test evaluates replacing the existing session-based authentication flow with token-based authentication for API requests. It is documentation-only and does not change runtime authentication behavior.
