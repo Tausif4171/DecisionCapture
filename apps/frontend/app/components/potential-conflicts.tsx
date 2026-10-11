@@ -1,11 +1,15 @@
 "use client";
 
 import Link from "next/link";
+import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { DecisionConflict, DecisionConflictStatus, DecisionStatus } from "@decisioncapture/shared";
 import { AlertTriangle, Check, ExternalLink, Loader2, ShieldAlert, X } from "lucide-react";
 import { getDecisionConflicts, reviewConflict } from "../../lib/api";
 import { ErrorState, LoadingState } from "./state-views";
+import { ReviewReasonDialog } from "./review-reason-dialog";
+
+type ConflictReviewAction = "dismiss" | "resolve";
 
 function statusLabel(status: DecisionConflictStatus) {
   return {
@@ -34,92 +38,136 @@ export function ConflictCard({
   conflict,
   canManage,
   onReview,
-  busy
+  busy,
+  reviewError = null
 }: {
   conflict: DecisionConflict;
   canManage: boolean;
-  onReview: (action: "dismiss" | "resolve") => void;
+  onReview: (action: ConflictReviewAction, note: string) => void;
   busy: boolean;
+  reviewError?: Error | null;
 }) {
   const isOpen = conflict.status === "OPEN";
+  const [reviewAction, setReviewAction] = useState<ConflictReviewAction | null>(null);
+  const [reviewNote, setReviewNote] = useState("");
+
+  const actionBusy = busy && reviewAction !== null;
+  const isDismiss = reviewAction === "dismiss";
 
   return (
-    <article className={`rounded-md border bg-white p-4 shadow-sm ${isOpen ? "border-amber-200" : "border-neutral-200"}`}>
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-        <div className="min-w-0">
-          <div className="flex flex-wrap items-center gap-2 text-xs font-semibold">
-            <span className={isOpen ? "text-amber-700" : "text-neutral-600"}>
-              {isOpen ? "Potential conflict" : statusLabel(conflict.status)}
-            </span>
-            <span className="rounded bg-neutral-100 px-1.5 py-1 font-medium text-neutral-600">
-              {Math.round(conflict.confidence * 100)}% confidence
-            </span>
-            <span className="rounded bg-neutral-100 px-1.5 py-1 font-medium text-neutral-600">
-              {decisionStatusLabel(conflict.historicalDecision.status)} decision
-            </span>
-            <span className="rounded bg-neutral-100 px-1.5 py-1 font-medium text-neutral-600">
-              {conflict.pullRequestState === "OPEN" ? "Open PR" : "Closed PR"}
-            </span>
+    <>
+      <article className={`rounded-md border bg-white p-4 shadow-sm ${isOpen ? "border-amber-200" : "border-neutral-200"}`}>
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+          <div className="min-w-0">
+            <div className="flex flex-wrap items-center gap-2 text-xs font-semibold">
+              <span className={isOpen ? "text-amber-700" : "text-neutral-600"}>
+                {isOpen ? "Potential conflict" : statusLabel(conflict.status)}
+              </span>
+              <span className="rounded bg-neutral-100 px-1.5 py-1 font-medium text-neutral-600">
+                {Math.round(conflict.confidence * 100)}% confidence
+              </span>
+              <span className="rounded bg-neutral-100 px-1.5 py-1 font-medium text-neutral-600">
+                {decisionStatusLabel(conflict.historicalDecision.status)} decision
+              </span>
+              <span className="rounded bg-neutral-100 px-1.5 py-1 font-medium text-neutral-600">
+                {conflict.pullRequestState === "OPEN" ? "Open PR" : "Closed PR"}
+              </span>
+            </div>
+            <h3 className="mt-2 break-words text-sm font-semibold leading-6 text-neutral-950">
+              {conflict.historicalDecision.decision}
+            </h3>
+            <p className="mt-1 text-xs text-neutral-500">
+              {conflict.prTitle} - PR #{conflict.prNumber} - detected {dateLabel(conflict.createdAt)}
+            </p>
           </div>
-          <h3 className="mt-2 break-words text-sm font-semibold leading-6 text-neutral-950">
-            {conflict.historicalDecision.decision}
-          </h3>
-          <p className="mt-1 text-xs text-neutral-500">
-            {conflict.prTitle} - PR #{conflict.prNumber} - detected {dateLabel(conflict.createdAt)}
-          </p>
+          {isOpen && canManage ? (
+            <div className="flex shrink-0 items-center gap-2 self-end sm:self-auto">
+              <button
+                type="button"
+                onClick={() => {
+                  setReviewNote("");
+                  setReviewAction("dismiss");
+                }}
+                disabled={busy || reviewAction !== null}
+                className="inline-flex min-h-9 items-center gap-1.5 rounded-md border border-neutral-200 px-3 text-xs font-medium text-neutral-700 hover:bg-neutral-50 disabled:text-neutral-400"
+              >
+                {busy && isDismiss ? <Loader2 className="size-4 animate-spin" aria-hidden="true" /> : <X className="size-4" aria-hidden="true" />}
+                Dismiss
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setReviewNote("");
+                  setReviewAction("resolve");
+                }}
+                disabled={busy || reviewAction !== null}
+                className="inline-flex min-h-9 items-center gap-1.5 rounded-md bg-neutral-950 px-3 text-xs font-medium text-white hover:bg-neutral-800 disabled:bg-neutral-300"
+              >
+                {busy && !isDismiss ? <Loader2 className="size-4 animate-spin" aria-hidden="true" /> : <Check className="size-4" aria-hidden="true" />}
+                Resolve
+              </button>
+            </div>
+          ) : null}
         </div>
-        {isOpen && canManage ? (
-          <div className="flex shrink-0 items-center gap-2 self-end sm:self-auto">
-            <button
-              type="button"
-              onClick={() => onReview("dismiss")}
-              disabled={busy}
-              className="inline-flex min-h-9 items-center gap-1.5 rounded-md border border-neutral-200 px-3 text-xs font-medium text-neutral-700 hover:bg-neutral-50 disabled:text-neutral-400"
-            >
-              {busy ? <Loader2 className="size-4 animate-spin" aria-hidden="true" /> : <X className="size-4" aria-hidden="true" />}
-              Dismiss
-            </button>
-            <button
-              type="button"
-              onClick={() => onReview("resolve")}
-              disabled={busy}
-              className="inline-flex min-h-9 items-center gap-1.5 rounded-md bg-neutral-950 px-3 text-xs font-medium text-white hover:bg-neutral-800 disabled:bg-neutral-300"
-            >
-              {busy ? <Loader2 className="size-4 animate-spin" aria-hidden="true" /> : <Check className="size-4" aria-hidden="true" />}
-              Resolve
-            </button>
+
+        <p className="mt-3 text-sm leading-6 text-neutral-700">{conflict.explanation}</p>
+        {conflict.evidence.length ? (
+          <div className="mt-3 border-t border-neutral-100 pt-3">
+            <p className="text-xs font-semibold uppercase tracking-normal text-neutral-500">Evidence</p>
+            <ul className="mt-2 space-y-1.5 text-xs leading-5 text-neutral-600">
+              {conflict.evidence.map((item) => (
+                <li key={item} className="flex gap-2">
+                  <span className="mt-2 size-1 shrink-0 rounded-full bg-neutral-400" aria-hidden="true" />
+                  <span>{item}</span>
+                </li>
+              ))}
+            </ul>
           </div>
         ) : null}
-      </div>
-
-      <p className="mt-3 text-sm leading-6 text-neutral-700">{conflict.explanation}</p>
-      {conflict.evidence.length ? (
-        <div className="mt-3 border-t border-neutral-100 pt-3">
-          <p className="text-xs font-semibold uppercase tracking-normal text-neutral-500">Evidence</p>
-          <ul className="mt-2 space-y-1.5 text-xs leading-5 text-neutral-600">
-            {conflict.evidence.map((item) => (
-              <li key={item} className="flex gap-2">
-                <span className="mt-2 size-1 shrink-0 rounded-full bg-neutral-400" aria-hidden="true" />
-                <span>{item}</span>
-              </li>
-            ))}
-          </ul>
+        <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-2 border-t border-neutral-100 pt-3 text-xs text-neutral-500">
+          <span>Similarity {Math.round(conflict.similarityScore * 100)}%</span>
+          <span>Commit {conflict.headSha.slice(0, 8)}</span>
+          <Link href={`/decisions/${conflict.historicalDecision.id}`} className="inline-flex items-center gap-1 font-medium text-neutral-700 hover:text-emerald-700">
+            Read historical decision
+            <ExternalLink className="size-3.5" aria-hidden="true" />
+          </Link>
+          <a href={conflict.prUrl} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 font-medium text-neutral-700 hover:text-emerald-700">
+            Open PR
+            <ExternalLink className="size-3.5" aria-hidden="true" />
+          </a>
         </div>
-      ) : null}
-      <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-2 border-t border-neutral-100 pt-3 text-xs text-neutral-500">
-        <span>Similarity {Math.round(conflict.similarityScore * 100)}%</span>
-        <span>Commit {conflict.headSha.slice(0, 8)}</span>
-        <Link href={`/decisions/${conflict.historicalDecision.id}`} className="inline-flex items-center gap-1 font-medium text-neutral-700 hover:text-emerald-700">
-          Read historical decision
-          <ExternalLink className="size-3.5" aria-hidden="true" />
-        </Link>
-        <a href={conflict.prUrl} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 font-medium text-neutral-700 hover:text-emerald-700">
-          Open PR
-          <ExternalLink className="size-3.5" aria-hidden="true" />
-        </a>
-      </div>
-      {conflict.reviewNote ? <p className="mt-2 text-xs text-neutral-500">Review note: {conflict.reviewNote}</p> : null}
-    </article>
+        {conflict.reviewNote ? <p className="mt-2 text-xs text-neutral-500">Review note: {conflict.reviewNote}</p> : null}
+      </article>
+      <ReviewReasonDialog
+        open={isOpen && reviewAction !== null}
+        title={isDismiss ? "Dismiss conflict" : "Resolve conflict"}
+        description={
+          isDismiss
+            ? "Record why this warning does not apply to the pull request. It will remain in the audit history."
+            : "Record how this conflict was reviewed and handled. It will remain in the audit history."
+        }
+        label={isDismiss ? "Dismissal note" : "Resolution note"}
+        placeholder={isDismiss ? "Testing dismiss lifecycle" : "Testing resolve lifecycle"}
+        value={reviewNote}
+        confirmLabel={isDismiss ? "Dismiss conflict" : "Resolve conflict"}
+        pendingLabel={isDismiss ? "Dismissing..." : "Resolving..."}
+        destructive={isDismiss}
+        isPending={actionBusy}
+        error={reviewError}
+        onChange={setReviewNote}
+        onClose={() => {
+          if (!actionBusy) {
+            setReviewAction(null);
+            setReviewNote("");
+          }
+        }}
+        onConfirm={() => {
+          if (reviewAction) {
+            onReview(reviewAction, reviewNote.trim());
+          }
+        }}
+      />
+    </>
   );
 }
 
@@ -137,7 +185,7 @@ export function PotentialConflicts({
   });
 
   const reviewMutation = useMutation({
-    mutationFn: ({ id, action }: { id: string; action: "dismiss" | "resolve" }) => reviewConflict(id, action),
+    mutationFn: ({ id, action, note }: { id: string; action: ConflictReviewAction; note: string }) => reviewConflict(id, action, note),
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: ["decision-conflicts", decisionId] });
       await queryClient.invalidateQueries({ queryKey: ["conflicts"] });
@@ -205,7 +253,8 @@ export function PotentialConflicts({
               conflict={conflict}
               canManage={overview.canManage}
               busy={reviewMutation.isPending && reviewMutation.variables?.id === conflict.id}
-              onReview={(action) => reviewMutation.mutate({ id: conflict.id, action })}
+              reviewError={reviewMutation.variables?.id === conflict.id && reviewMutation.isError ? reviewMutation.error : null}
+              onReview={(action, note) => reviewMutation.mutate({ id: conflict.id, action, note })}
             />
           ))}
         </div>
