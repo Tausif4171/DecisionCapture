@@ -31,3 +31,5 @@ Webhook delivery idempotency is verified separately from conflict analysis.
 This refresh is a harmless documentation change for the post-permission feedback check.
 
 Viewer access testing uses this same advisory conflict fixture.
+
+Rollback verification must preserve existing records while preventing new conflict scans.
